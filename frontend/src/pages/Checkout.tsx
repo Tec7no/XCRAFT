@@ -1,0 +1,637 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useStorageState } from '@/utils/storage';
+import { CartItem, Product, Order, OrderItem, PaymentMethod, CustomerInfo, PaymentInfo, User, Discount } from '@/types';
+import { useLanguage } from '@/i18n/LanguageContext';
+import { useSiteSettings } from '@/config/SiteSettingsContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ArrowLeft, ArrowRight, CreditCard, Building2, Truck, Upload, AlertCircle, CheckCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { createOrder } from '@/utils/ordersStore';
+import { validateStock, decrementStock } from '@/utils/stockUtils';
+import CreditCardForm from '@/components/CreditCardForm';
+import { processPayment, CardDetails } from '@/services/payment';
+import { EditableText } from '@/components/ui/editable-text';
+import { Progress } from '@/components/ui/progress';
+
+export default function Checkout() {
+    const navigate = useNavigate();
+    const { t, lang } = useLanguage();
+    const { settings } = useSiteSettings();
+    const { toast } = useToast();
+    const dir = lang === 'ar' ? 'rtl' : 'ltr';
+
+    // Get payment phone number from settings
+    const paymentPhone = settings.contactInfo?.paymentPhone || '01xxxxxxxxx';
+
+    // Access global state
+    const [cart, setCart] = useStorageState<CartItem[]>('cart', []);
+    const [products, setProducts] = useStorageState<Product[]>('products', []);
+    const [user] = useStorageState<User | null>('user', null);
+    const [discounts] = useStorageState<Discount[]>('discounts', []);
+
+    // Form state
+    const [customerInfo, setCustomerInfo] = React.useState<CustomerInfo>({
+        fullName: '',
+        phone: '',
+        email: '',
+        address: '',
+        city: '',
+    });
+    const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>('cod');
+    const [proofImage, setProofImage] = React.useState<string>('');
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+    const [promoCode, setPromoCode] = React.useState('');
+    const [appliedDiscount, setAppliedDiscount] = React.useState<Discount | null>(null);
+    const [saveAddress, setSaveAddress] = React.useState(false);
+
+    // Payment State
+    const [cardDetails, setCardDetails] = React.useState<CardDetails | null>(null);
+    const [isCardValid, setIsCardValid] = React.useState(false);
+
+    // Calculate totals
+    const subtotal = cart.reduce((acc, item) => acc + item.salePrice * item.quantity, 0);
+
+    const discountAmount = React.useMemo(() => {
+        if (!appliedDiscount) return 0;
+        if (appliedDiscount.minOrderAmount && subtotal < appliedDiscount.minOrderAmount) return 0;
+
+        if (appliedDiscount.type === 'percentage') {
+            return Math.min(subtotal, (subtotal * appliedDiscount.value) / 100);
+        } else {
+            return Math.min(subtotal, appliedDiscount.value);
+        }
+    }, [appliedDiscount, subtotal]);
+
+    const shippingConfig = settings.shippingConfig || { freeShippingThreshold: 1000, processingDays: '1-2', deliveryDays: '3-5', flatRateFee: 50 };
+    const delivery = subtotal >= shippingConfig.freeShippingThreshold ? 0 : shippingConfig.flatRateFee;
+    const total = Math.max(0, subtotal - discountAmount + delivery);
+
+    const handleApplyCoupon = () => {
+        const found = discounts.find(d => d.code === promoCode.trim().toUpperCase() && d.active);
+        if (!found) {
+            toast({ title: "Invalid Coupon", description: "This code does not exist or is inactive.", variant: "destructive" });
+            return;
+        }
+        if (found.minOrderAmount && subtotal < found.minOrderAmount) {
+            toast({ title: "Requirements Not Met", description: `Order must be at least ${found.minOrderAmount} EGP.`, variant: "destructive" });
+            return;
+        }
+        setAppliedDiscount(found);
+        toast({ title: "Coupon Applied!", description: `You saved with ${found.code}` });
+    };
+
+    // Validate form
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+
+        if (!customerInfo.fullName.trim()) newErrors.fullName = 'Full name is required';
+        if (!customerInfo.phone.trim()) newErrors.phone = 'Phone number is required';
+        if (!customerInfo.address.trim()) newErrors.address = 'Address is required';
+        if (!customerInfo.city.trim()) newErrors.city = 'City is required';
+
+        if (paymentMethod === 'transfer' && !proofImage) {
+            newErrors.proof = 'Payment proof is required for bank transfer';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // Handle proof image upload
+    const handleProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast({ title: 'Error', description: 'Please upload an image file', variant: 'destructive' });
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            toast({ title: 'Error', description: 'Image must be less than 5MB', variant: 'destructive' });
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setProofImage(reader.result as string);
+            setErrors(prev => ({ ...prev, proof: '' }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    // Handle checkout submission
+    const handleSubmit = async () => {
+        if (!validateForm()) return;
+
+        // Validate stock availability
+        const stockValidation = validateStock(cart, products);
+        if (!stockValidation.valid) {
+            toast({
+                title: 'Stock Issue',
+                description: stockValidation.errors.join('\n'),
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        // Simulate API delay (no longer needed for card, but kept for others or just remove)
+        // setTimeout(() => {
+        try {
+            // 0. Process Payment if Card
+            let transactionId = undefined;
+            let maskedCard = undefined;
+
+            if (paymentMethod === 'card') {
+                if (!cardDetails || !isCardValid) {
+                    toast({ title: 'Invalid Card', description: 'Please check your card details.', variant: 'destructive' });
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                const result = await processPayment(total, cardDetails);
+
+                if (!result.success) {
+                    toast({ title: 'Payment Failed', description: result.error || 'Transaction declined.', variant: 'destructive' });
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                transactionId = result.transactionId;
+                maskedCard = `**** **** **** ${cardDetails.number.slice(-4)}`;
+            }
+
+            // 1. Create order items from cart
+            const orderItems: OrderItem[] = cart.map(item => ({
+                productId: item.id,
+                name: item.name,
+                code: item.code,
+                image: item.images[0] || '',
+                size: item.selectedSize,
+                color: item.selectedColor,
+                colorName: item.colors.find(c => c.hex === item.selectedColor)?.name,
+                quantity: item.quantity,
+                unitPrice: item.salePrice,
+                lineTotal: item.salePrice * item.quantity,
+            }));
+
+            // 2. Create payment info
+            const payment: PaymentInfo = {
+                method: paymentMethod,
+                proofImage: paymentMethod === 'transfer' ? proofImage : undefined,
+                transactionId,
+                maskedCard,
+                cardBrand: 'Visa' // Mock detection for now
+            };
+
+            // 3. Create order via store
+            const order = createOrder({
+                items: orderItems,
+                customer: customerInfo,
+                payment,
+                subtotal,
+                discount: discountAmount,
+                delivery,
+                total,
+                status: 'pending_review',
+            });
+
+            // 3.5 Save Address if requested
+            if (saveAddress && user) {
+                const newAddress: any = { // using any to avoid type hurdles for now
+                    id: crypto.randomUUID(),
+                    name: "New Address " + (user.addresses?.length || 0 + 1),
+                    fullName: customerInfo.fullName,
+                    phone: customerInfo.phone,
+                    address: customerInfo.address,
+                    city: customerInfo.city,
+                    isDefault: false
+                };
+
+                // We need to update the User in storage. 
+                // Since 'user' state is from hook, we might need a way to update it.
+                // But 'user' here is just the value. We need the setter or to manually update storage.
+                // Since we can't easily access setUser here without refactoring, 
+                // we will modify the localStorage directly or use a helper event.
+                // Better approach: We have 'user' value, let's create updated object and save it.
+
+                const updatedUser = {
+                    ...user,
+                    addresses: [...(user.addresses || []), newAddress]
+                };
+
+                // Update user storage synchronized
+                import('@/utils/storage').then(({ setStorageItem }) => {
+                    setStorageItem('user', updatedUser);
+                });
+            }
+
+            // 4. Decrement stock
+            const updatedProducts = decrementStock(cart, products);
+            setProducts(updatedProducts);
+
+            // 5. Clear cart
+            setCart([]);
+
+            // 6. Success feedback
+            toast({
+                title: 'Order Placed Successfully!',
+                description: `Thank you! Your order #${order.id} is being reviewed.`,
+            });
+
+            // 7. Redirect to confirmation
+            navigate(`/order-confirmation?orderId=${order.id}`);
+        } catch (error) {
+            console.error('Checkout error:', error);
+            toast({
+                title: 'Error',
+                description: 'Something went wrong. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (cart.length === 0) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#f6efea] p-4 text-center">
+                <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
+                <h2 className="text-2xl font-bold text-[#3a2d23] mb-2">{t('checkout_emptyTitle')}</h2>
+                <p className="text-[#3a2d23]/70 mb-6">{t('checkout_emptyDesc')}</p>
+                <Button onClick={() => navigate('/')} className="bg-[#3a2d23] text-white">
+                    {t('checkout_continueShopping')}
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-[#F8F5F1] py-12 px-4" dir={dir}>
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <Button
+                    variant="ghost"
+                    onClick={() => {
+                        if (window.history.length > 1) navigate(-1);
+                        else navigate('/');
+                    }}
+                    className="mb-8 hover:bg-transparent hover:text-[#C8A96A] p-0 flex gap-2 text-muted-foreground transition-colors uppercase font-bold text-xs tracking-widest"
+                >
+                    {dir === 'rtl' ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+                    <EditableText k="checkout_backToShop" as="span" />
+                </Button>
+
+                <h1 className="text-4xl font-serif font-medium text-[#0D0D0D] uppercase tracking-tighter mb-10">{t('checkout_title')}</h1>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                    {/* Left: Forms */}
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* Customer Information */}
+                        <Card className="border-[#D8D2C8] shadow-sm bg-white rounded-xl overflow-hidden">
+                            <CardHeader className="bg-white border-b border-[#D8D2C8]/50 pb-6">
+                                <CardTitle className="text-sm font-bold uppercase tracking-widest text-[#0D0D0D]">
+                                    {t('checkout_customerInfo')}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-8 space-y-6">
+                                {user?.addresses && user.addresses.length > 0 && (
+                                    <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {user.addresses.map(a => (
+                                            <div
+                                                key={a.id}
+                                                onClick={() => {
+                                                    setCustomerInfo({
+                                                        ...customerInfo,
+                                                        fullName: a.fullName,
+                                                        phone: a.phone,
+                                                        address: a.address,
+                                                        city: a.city
+                                                    });
+                                                }}
+                                                className={`
+                                                    border rounded-lg p-4 cursor-pointer transition-all relative
+                                                    ${customerInfo.address === a.address
+                                                        ? 'border-[#C8A96A] bg-[#C8A96A]/5 ring-1 ring-[#C8A96A]'
+                                                        : 'border-[#D8D2C8] hover:border-[#C8A96A]/50 bg-white'
+                                                    }
+                                                `}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p className="font-bold text-xs uppercase tracking-wide text-[#0D0D0D] mb-1 flex items-center gap-2">
+                                                            {customerInfo.address === a.address && <CheckCircle className="w-3 h-3 text-[#C8A96A]" />}
+                                                            {a.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground line-clamp-1 font-sans">{a.address}</p>
+                                                        <p className="text-[10px] text-muted-foreground/70 font-sans">{a.city}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_fullNameLabel')}</label>
+                                        <input
+                                            type="text"
+                                            value={customerInfo.fullName}
+                                            onChange={e => setCustomerInfo(prev => ({ ...prev, fullName: e.target.value }))}
+                                            className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.fullName ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                            placeholder="John Doe"
+                                        />
+                                        {errors.fullName && <p className="text-red-500 text-[10px] mt-1">{errors.fullName}</p>}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_phoneLabel')}</label>
+                                        <input
+                                            type="tel"
+                                            value={customerInfo.phone}
+                                            onChange={e => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                                            className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.phone ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                            placeholder="+20 1xx xxx xxxx"
+                                        />
+                                        {errors.phone && <p className="text-red-500 text-[10px] mt-1">{errors.phone}</p>}
+                                    </div>
+                                    <div className="md:col-span-2 space-y-2">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_emailLabel')}</label>
+                                        <input
+                                            type="email"
+                                            value={customerInfo.email}
+                                            onFocus={() => { if (!customerInfo.email && user?.email) setCustomerInfo(prev => ({ ...prev, email: user.email })) }}
+                                            onChange={e => setCustomerInfo(prev => ({ ...prev, email: e.target.value }))}
+                                            className="w-full p-3 border border-[#D8D2C8] rounded-none text-sm bg-transparent focus:border-[#C8A96A] outline-none transition-colors font-sans"
+                                            placeholder="john@example.com"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-2">
+                                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_addressLabel')}</label>
+                                        <input
+                                            type="text"
+                                            value={customerInfo.address}
+                                            onChange={e => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
+                                            className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.address ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                            placeholder="Street, Building, Apartment"
+                                        />
+                                        {errors.address && <p className="text-red-500 text-[10px] mt-1">{errors.address}</p>}
+                                    </div>
+
+                                    {user && (
+                                        <div className="md:col-span-2 mt-2">
+                                            <label className="flex items-center gap-3 cursor-pointer group">
+                                                <input
+                                                    type="checkbox"
+                                                    className="accent-[#C8A96A] w-4 h-4 cursor-pointer"
+                                                    onChange={(e) => {
+                                                    }}
+                                                />
+                                                <span className="text-xs font-bold text-muted-foreground group-hover:text-[#C8A96A] transition-colors uppercase tracking-wide">
+                                                    {t('checkout_saveAddress')}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_cityLabel')}</label>
+                                    <input
+                                        type="text"
+                                        value={customerInfo.city}
+                                        onChange={e => setCustomerInfo(prev => ({ ...prev, city: e.target.value }))}
+                                        className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.city ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                        placeholder="Cairo"
+                                    />
+                                    {errors.city && <p className="text-red-500 text-[10px] mt-1">{errors.city}</p>}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Payment Method */}
+                    <div className="lg:col-span-2">
+                        <Card className="border-[#D8D2C8] shadow-sm bg-white rounded-xl overflow-hidden">
+                            <CardHeader className="bg-white border-b border-[#D8D2C8]/50 pb-6">
+                                <CardTitle className="text-sm font-bold uppercase tracking-widest text-[#0D0D0D]">
+                                    {t('checkout_paymentMethod')}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-8 space-y-4">
+                                {/* COD */}
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('cod')}
+                                    className={`w-full p-6 border rounded-lg flex items-center gap-6 transition-all ${paymentMethod === 'cod'
+                                        ? 'border-[#C8A96A] bg-[#C8A96A]/5'
+                                        : 'border-[#D8D2C8] hover:border-[#C8A96A]/50'
+                                        }`}
+                                >
+                                    <Truck className={`w-6 h-6 ${paymentMethod === 'cod' ? 'text-[#C8A96A]' : 'text-muted-foreground'}`} />
+                                    <div className={`text-left font-sans ${lang === 'ar' ? 'text-right' : ''}`}>
+                                        <p className="font-bold text-[#0D0D0D] uppercase text-sm tracking-wide">{t('checkout_cod')}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{t('checkout_cod_desc')}</p>
+                                    </div>
+                                </button>
+
+                                {/* Bank Transfer */}
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('transfer')}
+                                    className={`w-full p-6 border rounded-lg flex items-center gap-6 transition-all ${paymentMethod === 'transfer'
+                                        ? 'border-[#C8A96A] bg-[#C8A96A]/5'
+                                        : 'border-[#D8D2C8] hover:border-[#C8A96A]/50'
+                                        }`}
+                                >
+                                    <Building2 className={`w-6 h-6 ${paymentMethod === 'transfer' ? 'text-[#C8A96A]' : 'text-muted-foreground'}`} />
+                                    <div className={`text-left font-sans ${lang === 'ar' ? 'text-right' : ''}`}>
+                                        <p className="font-bold text-[#0D0D0D] uppercase text-sm tracking-wide">{t('checkout_transfer')}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{t('checkout_transfer_desc')}</p>
+                                    </div>
+                                </button>
+
+                                {/* Card */}
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('card')}
+                                    className={`w-full p-6 border rounded-lg flex items-center gap-6 transition-all ${paymentMethod === 'card'
+                                        ? 'border-[#C8A96A] bg-[#C8A96A]/5'
+                                        : 'border-[#D8D2C8] hover:border-[#C8A96A]/50'
+                                        }`}
+                                >
+                                    <CreditCard className={`w-6 h-6 ${paymentMethod === 'card' ? 'text-[#C8A96A]' : 'text-muted-foreground'}`} />
+                                    <div className={`text-left font-sans ${lang === 'ar' ? 'text-right' : ''}`}>
+                                        <p className="font-bold text-[#0D0D0D] uppercase text-sm tracking-wide">{t('checkout_card')}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{t('checkout_card_desc')}</p>
+                                    </div>
+                                </button>
+
+                                {/* Card Form Injection */}
+                                {paymentMethod === 'card' && (
+                                    <div className="pt-4 animate-in fade-in zoom-in-95">
+                                        <CreditCardForm
+                                            onChange={(details, isValid) => {
+                                                setCardDetails(details);
+                                                setIsCardValid(isValid);
+                                            }}
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                )}
+                            </CardContent>
+
+                            {/* Payment Proof Upload (for transfer) */}
+                            {paymentMethod === 'transfer' && (
+                                <div className="p-8 bg-[#F8F5F1] border-t border-[#D8D2C8]">
+                                    <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-3">{t('checkout_uploadProof')}</p>
+                                    <p className="text-xs text-[#0D0D0D] mb-4 font-sans border border-[#C8A96A] p-3 rounded inline-block bg-[#C8A96A]/10">
+                                        {t('checkout_transferTo')} <span className="font-bold">Instapay/VodafoneCash: {paymentPhone}</span>
+                                    </p>
+
+                                    {proofImage ? (
+                                        <div className="relative inline-block">
+                                            <img src={proofImage} alt="Payment proof" className="max-h-48 rounded border border-[#D8D2C8]" />
+                                            <button
+                                                type="button"
+                                                onClick={() => setProofImage('')}
+                                                className="absolute -top-2 -right-2 bg-[#0D0D0D] text-white p-1 rounded-full hover:bg-red-600 transition-colors"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-all ${errors.proof ? 'border-red-500 bg-red-50' : 'border-[#D8D2C8] hover:border-[#C8A96A] hover:bg-white'
+                                            }`}>
+                                            <Upload className="w-8 h-8 text-muted-foreground mb-3" />
+                                            <span className="text-xs font-bold uppercase tracking-widest text-[#0D0D0D]">{t('checkout_clickToUpload')}</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleProofUpload}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    )}
+                                    {errors.proof && <p className="text-red-500 text-[10px] mt-2">{errors.proof}</p>}
+                                </div>
+                            )}
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Right: Order Summary */}
+                <div className="lg:col-span-1">
+                    <Card className="border-[#D8D2C8] shadow-sm bg-white rounded-xl sticky top-4 overflow-hidden">
+                        <CardHeader className="bg-white border-b border-[#D8D2C8]/50 pb-6">
+                            <CardTitle className="text-sm font-bold uppercase tracking-widest text-[#0D0D0D]">
+                                {t('checkout_orderSummary')}
+                            </CardTitle>
+                        </CardHeader>
+
+                        <CardContent className="pt-6">
+                            {/* Items */}
+                            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 mb-6 custom-scrollbar">
+                                {cart.map(item => (
+                                    <div key={`${item.id}-${item.selectedColor}-${item.selectedSize}`} className="flex gap-4 group">
+                                        <div className="w-16 h-20 bg-[#F8F5F1] rounded-sm overflow-hidden flex-shrink-0 border border-[#D8D2C8]">
+                                            <img src={item.images[0]} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                        </div>
+                                        <div className="flex-1 min-w-0 py-1">
+                                            <p className="text-xs font-bold text-[#0D0D0D] truncate uppercase tracking-wide mb-1">{item.name}</p>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+                                                {item.selectedSize} / <span className="inline-block w-2 h-2 rounded-full border border-border align-middle ml-1" style={{ backgroundColor: item.selectedColor }}></span>
+                                            </p>
+                                            <p className="text-xs font-bold text-[#C8A96A]">
+                                                {item.salePrice.toLocaleString()} × {item.quantity}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <Separator className="bg-[#D8D2C8] mb-6" />
+
+                            <div className="space-y-3 text-sm">
+                                {/* Free Shipping Progress */}
+                                {subtotal > 0 && (
+                                    <div className="mb-6 space-y-2">
+                                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
+                                            <span className={subtotal >= shippingConfig.freeShippingThreshold ? "text-green-600" : "text-muted-foreground"}>
+                                                {subtotal >= shippingConfig.freeShippingThreshold
+                                                    ? t('cart_shipping_unlocked')
+                                                    : <span dangerouslySetInnerHTML={{ __html: t('cart_shipping_remaining').replace('{{amount}}', `${(shippingConfig.freeShippingThreshold - subtotal).toLocaleString()} EGP`) }} />}
+                                            </span>
+                                            <span className="text-muted-foreground">{Math.round(Math.min(100, (subtotal / shippingConfig.freeShippingThreshold) * 100))}%</span>
+                                        </div>
+                                        <Progress value={Math.min(100, (subtotal / shippingConfig.freeShippingThreshold) * 100)} className="h-1.5 bg-[#F8F5F1]" />
+                                    </div>
+                                )}
+
+                                {/* Promo Code Input */}
+                                <div className="flex gap-2 mb-6">
+                                    <input
+                                        placeholder="Promo Code"
+                                        value={promoCode}
+                                        onChange={(e) => setPromoCode(e.target.value)}
+                                        disabled={!!appliedDiscount}
+                                        className="flex-1 bg-white border border-[#D8D2C8] rounded-none px-3 py-2 text-xs uppercase font-bold outline-none focus:border-[#C8A96A] transition-colors"
+                                    />
+                                    {appliedDiscount ? (
+                                        <Button onClick={() => { setAppliedDiscount(null); setPromoCode(''); }} variant="outline" className="text-destructive h-[38px] px-3 border-[#D8D2C8] rounded-none hover:bg-destructive/10">✕</Button>
+                                    ) : (
+                                        <Button onClick={handleApplyCoupon} className="bg-[#0D0D0D] text-white h-[38px] text-[10px] uppercase font-black tracking-widest rounded-none hover:bg-[#C8A96A] hover:text-[#0D0D0D]">{t('checkout_applyCoupon')}</Button>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
+                                    <span>{t('cart_subtotal')}</span>
+                                    <span className="font-mono text-[#0D0D0D]">{subtotal.toLocaleString()} EGP</span>
+                                </div>
+                                {discountAmount > 0 && (
+                                    <div className="flex justify-between text-[#C8A96A] font-bold text-xs uppercase tracking-wider">
+                                        <span>Discount ({appliedDiscount?.code})</span>
+                                        <span className="font-mono">-{discountAmount.toLocaleString()} EGP</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
+                                    <span>{t('orders_delivery')}</span>
+                                    {delivery === 0 ? (
+                                        <span className="text-[#C8A96A]">FREE</span>
+                                    ) : (
+                                        <span className="font-mono text-[#0D0D0D]">{delivery.toLocaleString()} EGP</span>
+                                    )}
+                                </div>
+
+                                <Separator className="bg-[#D8D2C8] my-4" />
+
+                                <div className="flex justify-between font-black text-xl text-[#0D0D0D]">
+                                    <span className="font-serif tracking-tighter">{t('checkout_total')}</span>
+                                    <span className="font-serif tracking-tighter text-[#C8A96A]">{total.toLocaleString()} EGP</span>
+                                </div>
+                            </div>
+
+                            {/* Submit */}
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className="w-full mt-8 bg-[#0D0D0D] hover:bg-[#C8A96A] hover:text-[#0D0D0D] text-white py-6 font-black uppercase tracking-widest rounded-sm transition-all shadow-lg active:scale-95"
+                            >
+                                {isSubmitting ? 'Processing...' : t('checkout_placeOrder')}
+                            </Button>
+
+                            <p className="text-[9px] text-center text-muted-foreground/50 mt-4 uppercase tracking-widest">
+                                {t('checkout_secure')}
+                            </p>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </div>
+    );
+}

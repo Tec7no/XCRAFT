@@ -1,0 +1,17 @@
+export const PREDEFINED_ROUTES = [
+    { label: 'Shop All', path: '/shop' },
+    { label: 'Men Collection', path: '/shop/men' },
+    { label: 'Women Collection', path: '/shop/women' },
+    { label: 'Kids Collection', path: '/shop/kids' },
+    { label: 'New Arrivals', path: '/shop/new' },
+    { label: 'Best Sellers', path: '/shop/best-sellers' },
+    { label: 'Offers', path: '/shop/offers' },
+    { label: 'Jackets', path: '/shop/jackets' },
+    { label: 'Overshirts', path: '/shop/overshirts' },
+    { label: 'About Us', path: '/about-us' },
+    { label: 'Contact Us', path: '/contact-us' },
+    { label: 'FAQ', path: '/faq' },
+    { label: 'Store Locator', path: '/store-locator' },
+    { label: 'Shipping Info', path: '/shipping-info' },
+    { label: 'Privacy Policy', path: '/privacy-policy' },
+];

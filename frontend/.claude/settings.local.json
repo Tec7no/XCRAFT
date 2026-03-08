@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(del \"e:\\\\full cognitive side\\\\non\\\\old\\\\ready-deploy-site-main\\\\ready-deploy-site-main\\\\src\\\\components\\\\AdminLogin.tsx\")"
+    ]
+  }
+}

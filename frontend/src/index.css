@@ -1,0 +1,367 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+Brand Color Palette:
+- Deep Ruby (Accent/CTAs): #A31621 → 354 79% 37%
+- Mocha Mousse (Base): #967969 → 26 17% 50%
+- Soft Blush: #F3DAD8 → 4 48% 90%
+- Butter Yellow (Highlights): #F5E050 → 52 89% 64%
+*/
+
+@layer base {
+  :root {
+    --ic-primary: #000000;
+    --ic-primary-hover: #1a1a1a;
+    --ic-bg: #FFFFFF;
+    --ic-text: #000000;
+    --ic-border: #E5E5E5;
+    --ic-card: #FFFFFF;
+
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 0 0% 0%;
+
+    --radius: 0.25rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 89%;
+    --sidebar-ring: 0 0% 0%;
+
+    --chart-1: 0 0% 0%;
+    --chart-2: 0 0% 20%;
+    --chart-3: 0 0% 40%;
+    --chart-4: 0 0% 60%;
+    --chart-5: 0 0% 80%;
+
+    --sidebar: 4 48% 94%;
+    --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    --font-serif: 'Lora', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+    --shadow-2xs: 1px 1px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-xs: 2px 2px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 3px 3px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-md: 6px 6px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 10px 10px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 14px 14px 0px 0px rgba(0, 0, 0, 0.05);
+    --shadow-2xl: 20px 20px 0px 0px rgba(0, 0, 0, 0.05);
+
+    --tracking-normal: 0em;
+    --spacing: 0.25rem;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 80%;
+    --secondary-foreground: 0 0% 0%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 20%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 100%;
+
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 0 0% 100%;
+
+    --shadow-2xs: 1px 1px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-xs: 2px 2px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-sm: 3px 3px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow: 4px 4px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-md: 6px 6px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-lg: 10px 10px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-xl: 14px 14px 0px 0px rgba(255, 255, 255, 0.1);
+    --shadow-2xl: 20px 20px 0px 0px rgba(255, 255, 255, 0.1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent iOS rubber banding horizontal scroll */
+    overscroll-behavior-x: none;
+  }
+
+  html {
+     overflow-x: hidden;
+     width: 100%;
+     scrollbar-gutter: stable;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-shift {
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* GPU-optimized marquee styles */
+.marquee {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.marquee__track {
+  display: flex;
+  white-space: nowrap;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  animation: marquee-scroll 20s linear infinite;
+}
+
+.marquee__item {
+  flex-shrink: 0;
+  padding: 0.5rem 3rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+@media (min-width: 768px) {
+  .marquee__item {
+    font-size: 12px;
+  }
+}
+
+/* Pause on hover */
+.marquee:hover .marquee__track {
+  animation-play-state: paused;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .marquee__track {
+    animation: none;
+  }
+}
+
+/* Force LTR direction for brand name in RTL mode */
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ===== Hero Carousel Styles ===== */
+.hero-carousel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hero-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.hero-carousel__slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.hero-carousel__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* ===== Global Reduced Motion Support ===== */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .hero-carousel {
+    scroll-behavior: auto;
+  }
+}
+
+/* Optional: Manual reduce-motion class for programmatic control */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Hero text outline for readability on image backgrounds */
+.hero-outline {
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.85),
+    0 0 10px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(0, 0, 0, 0.4);
+}
+
+/* ========================================= */
+/* RADICAL PERFORMANCE MODE                  */
+/* ========================================= */
+
+:root {
+  --perf: 1;
+}
+
+/* Disable heavy effects globally when .perf is active */
+.perf * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Kill blur/backdrop filters */
+.perf .backdrop-blur,
+.perf [class*="backdrop-blur"],
+.perf [style*="backdrop-filter"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Reduce huge shadows */
+.perf [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+/* Optimize scrolling */
+.perf html {
+  scroll-behavior: auto !important;
+}
+
+/* Respect prefers-reduced-motion too */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
