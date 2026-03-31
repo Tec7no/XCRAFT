@@ -137,8 +137,12 @@ const ProfilePage = () => {
                                 <form onSubmit={(e) => {
                                     e.preventDefault();
                                     const formData = new FormData(e.currentTarget);
+                                    const firstName = formData.get('firstName') as string;
+                                    const lastName = formData.get('lastName') as string;
+                                    const name = `${firstName} ${lastName}`.trim();
+
                                     const updates = {
-                                        name: formData.get('name') as string,
+                                        name,
                                         email: formData.get('email') as string,
                                         phone: formData.get('phone') as string
                                     };
@@ -146,13 +150,23 @@ const ProfilePage = () => {
                                     toast({ title: t('profile_status_updated'), description: t('profile_status_updated_desc') });
                                 }} className="space-y-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1"><EditableText k="profile_fullName" as="span" /></label>
-                                            <input
-                                                name="name"
-                                                defaultValue={user.name}
-                                                className="w-full bg-background border border-border p-3 rounded text-sm outline-none focus:border-secondary transition-colors"
-                                            />
+                                        <div className="flex gap-4 col-span-1 md:col-span-2">
+                                            <div className="flex-1">
+                                                <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">First Name</label>
+                                                <input
+                                                    name="firstName"
+                                                    defaultValue={user.name?.split(' ')[0] || ''}
+                                                    className="w-full bg-background border border-border p-3 rounded text-sm outline-none focus:border-secondary transition-colors"
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Last Name</label>
+                                                <input
+                                                    name="lastName"
+                                                    defaultValue={user.name?.split(' ').slice(1).join(' ') || ''}
+                                                    className="w-full bg-background border border-border p-3 rounded text-sm outline-none focus:border-secondary transition-colors"
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1"><EditableText k="profile_email" as="span" /></label>
@@ -172,10 +186,6 @@ const ProfilePage = () => {
                                                 placeholder="+20..."
                                                 className="w-full bg-background border border-border p-3 rounded text-sm outline-none focus:border-secondary transition-colors"
                                             />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1"><EditableText k="profile_role" as="span" /></label>
-                                            <div className="p-3 bg-muted rounded font-medium capitalize text-sm text-muted-foreground cursor-not-allowed select-none">{user.role}</div>
                                         </div>
                                     </div>
 
@@ -238,7 +248,10 @@ const ProfilePage = () => {
                                         <h3 className="text-xl font-black uppercase tracking-tighter mb-6"><EditableText k="profile_newAddress" as="span" /></h3>
                                         <form onSubmit={handleSaveAddress} className="space-y-4">
                                             <input required placeholder={t('profile_placeholder_label')} className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, name: e.target.value })} />
-                                            <input required placeholder={t('profile_placeholder_fullName')} className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, fullName: e.target.value })} />
+                                            <div className="flex gap-4">
+                                                <input required placeholder="First Name" className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, fullName: `${e.target.value} ${newAddress.fullName?.split(' ').slice(1).join(' ') || ''}`.trim() })} />
+                                                <input required placeholder="Last Name" className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, fullName: `${newAddress.fullName?.split(' ')[0] || ''} ${e.target.value}`.trim() })} />
+                                            </div>
                                             <input required placeholder={t('profile_placeholder_phone')} className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, phone: e.target.value })} />
                                             <input required placeholder={t('profile_placeholder_address')} className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, address: e.target.value })} />
                                             <input required placeholder={t('profile_placeholder_city')} className="w-full bg-muted border border-border p-3 rounded text-sm outline-none focus:border-secondary" onChange={e => setNewAddress({ ...newAddress, city: e.target.value })} />

@@ -47,7 +47,9 @@ interface AuthFormProps {
 }
 
 interface FormData {
-    name: string;
+    name?: never;
+    firstName: string;
+    lastName: string;
     email: string;
     password: string;
     confirmPassword: string;
@@ -58,7 +60,9 @@ interface FormData {
 }
 
 interface FormErrors {
-    name?: string;
+    name?: never;
+    firstName?: string;
+    lastName?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -179,7 +183,8 @@ export function AuthForm({
     const [isLoading, setIsLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [formData, setFormData] = useState<FormData>({
-        name: '',
+        firstName: '',
+        lastName: '',
         email: '',
         password: '',
         confirmPassword: '',
@@ -196,7 +201,8 @@ export function AuthForm({
         setSuccessMessage("");
         setErrors({});
         setFormData({
-            name: "",
+            firstName: "",
+            lastName: "",
             email: "",
             password: "",
             confirmPassword: "",
@@ -221,9 +227,14 @@ export function AuthForm({
         let error = '';
 
         switch (field) {
-            case 'name':
+            case 'firstName':
                 if (typeof value === 'string' && authMode === 'signup' && !value.trim()) {
-                    error = 'Name is required';
+                    error = 'First name is required';
+                }
+                break;
+            case 'lastName':
+                if (typeof value === 'string' && authMode === 'signup' && !value.trim()) {
+                    error = 'Last name is required';
                 }
                 break;
 
@@ -328,65 +339,28 @@ export function AuthForm({
     // Handle form submission - this would be replaced with your actual authentication logic
     const handleSubmit = async (e: React.FormEvent) => {
 
-    e.preventDefault();
+        e.preventDefault();
 
-    if (!validateForm()) return;
+        if (!validateForm()) return;
 
-    setIsLoading(true);
-    setErrors({});
+        setIsLoading(true);
+        setErrors({});
 
-    try {
+        try {
 
-        // =========================
-        // LOGIN
-        // =========================
-        if (authMode === "login") {
+            // =========================
+            // LOGIN
+            // =========================
+            if (authMode === "login") {
 
-            const res = await fetch("http://localhost:5000/auth/login", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    email: formData.email,
-                    password: formData.password
-                })
-            });
-
-            const data = await res.json();
-
-            if (!data.success) {
-                setErrors({ general: data.message });
-                return;
-            }
-
-            setSuccessMessage("Login successful");
-
-            onSuccess?.({
-                email: data.user.email,
-                name: data.user.name,
-                token: data.token,
-                role: data.user.role,
-                id: data.user.id,
-                phone: data.user.phone,
-            });
-
-        }
-
-        // =========================
-        // SIGNUP
-        // =========================
-        else if (authMode === "signup") {
-
-            if (registrationStep === "details") {
-
-                const res = await fetch("http://localhost:5000/auth/send-otp", {
+                const res = await fetch("http://localhost:5000/auth/login", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        email: formData.email
+                        email: formData.email,
+                        password: formData.password
                     })
                 });
 
@@ -397,221 +371,235 @@ export function AuthForm({
                     return;
                 }
 
-                setRegistrationStep("verification");
-                setSuccessMessage("OTP sent to your email");
-
-            }
-
-            else if (registrationStep === "verification") {
-                console.log(formData.verificationCode)
-                const verifyRes = await fetch("http://localhost:5000/auth/verify-otp", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        email: formData.email,
-                        otp: formData.verificationCode
-                    })
-                });
-
-                const verifyData = await verifyRes.json();
-
-                if (!verifyData.success) {
-                    setErrors({ general: verifyData.message });
-                    return;
-                }
-
-                const signupRes = await fetch("http://localhost:5000/auth/signup", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        name: formData.name,
-                        email: formData.email,
-                        password: formData.password,
-                        confirmPassword: formData.confirmPassword,
-                        phone: formData.phone
-                    })
-                });
-
-                const signupData = await signupRes.json();
-
-                if (!signupData.success) {
-                    setErrors({ general: signupData.message });
-                    return;
-                }
-
-                setSuccessMessage("Account created successfully");
+                setSuccessMessage("Login successful");
 
                 onSuccess?.({
-                    email: signupData.user.email,
-                    name: signupData.user.name,
-                    token: signupData.token,
-                    role: signupData.user.role,
-                    id: signupData.user.id,
-                    phone: signupData.user.phone,
+                    email: data.user.email,
+                    name: data.user.name,
+                    token: data.token,
+                    role: data.user.role,
+                    id: data.user.id,
+                    phone: data.user.phone,
                 });
 
             }
+
+            // =========================
+            // SIGNUP
+            // =========================
+            else if (authMode === "signup") {
+
+                if (registrationStep === "details") {
+
+                    const res = await fetch("http://localhost:5000/auth/send-otp", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            email: formData.email
+                        })
+                    });
+
+                    const data = await res.json();
+
+                    if (!data.success) {
+                        setErrors({ general: data.message });
+                        return;
+                    }
+
+                    setRegistrationStep("verification");
+                    setSuccessMessage("OTP sent to your email");
+
+                }
+
+                else if (registrationStep === "verification") {
+                    console.log(formData.verificationCode)
+                    const verifyRes = await fetch("http://localhost:5000/auth/verify-otp", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            email: formData.email,
+                            otp: formData.verificationCode
+                        })
+                    });
+
+                    const verifyData = await verifyRes.json();
+
+                    if (!verifyData.success) {
+                        setErrors({ general: verifyData.message });
+                        return;
+                    }
+
+                    const signupRes = await fetch("http://localhost:5000/auth/signup", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            name: `${formData.firstName} ${formData.lastName}`.trim(),
+                            email: formData.email,
+                            password: formData.password,
+                            confirmPassword: formData.confirmPassword,
+                            phone: formData.phone
+                        })
+                    });
+
+                    const signupData = await signupRes.json();
+
+                    if (!signupData.success) {
+                        setErrors({ general: signupData.message });
+                        return;
+                    }
+
+                    setSuccessMessage("Account created successfully");
+
+                    onSuccess?.({
+                        email: signupData.user.email,
+                        name: signupData.user.name,
+                        token: signupData.token,
+                        role: signupData.user.role,
+                        id: signupData.user.id,
+                        phone: signupData.user.phone,
+                    });
+
+                }
+
+            }
+
+        } catch (error) {
+
+            setErrors({
+                general: "Server error"
+            });
+
+        } finally {
+
+            setIsLoading(false);
 
         }
 
-    } catch (error) {
-
-        setErrors({
-            general: "Server error"
-        });
-
-    } finally {
-
-        setIsLoading(false);
-
-    }
-
-};
-
-    // Render auth form content based on mode and step
-const renderAuthContent = () => {
-
-  if (authMode === "reset") {
-
-    const handleResetSubmit = async () => {
-
-      if (!formData.email) {
-        setErrors({ general: "Please enter your email" });
-        return;
-      }
-
-      try {
-
-        setIsLoading(true);
-        setErrors({});
-        setSuccessMessage("");
-
-        const res = await fetch("http://localhost:5000/auth/forgot-password", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            email: formData.email
-          })
-        });
-
-        const data = await res.json();
-
-        // الرسالة اللي جاية من الباك
-        setSuccessMessage(data.message);
-
-        // يرجع للوجين بعد 5 ثواني
-        setTimeout(() => {
-          resetFormState();  
-          setAuthMode("login");
-        }, 5000);
-
-      } catch (error) {
-
-        console.error("Reset password error:", error);
-
-        setErrors({
-          general: "Server error. Please try again."
-        });
-
-      } finally {
-
-        setIsLoading(false);
-
-      }
     };
 
-    return (
+    // Render auth form content based on mode and step
+    const renderAuthContent = () => {
 
-      <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-5">
+        if (authMode === "reset") {
 
-        <div className="text-center mb-6">
-          <KeyRound className="h-12 w-12 text-primary mx-auto mb-3" />
+            const handleResetSubmit = async () => {
 
-          <h3 className="text-xl font-semibold mb-2">
-            Password Recovery
-          </h3>
+                if (!formData.email) {
+                    setErrors({ general: "Please enter your email" });
+                    return;
+                }
 
-          <p className="text-muted-foreground text-sm">
-            Enter your email and we’ll send a password reset link.
-          </p>
-        </div>
+                try {
 
-        {successMessage && (
-          <div className="bg-green-100 text-green-700 p-3 rounded-lg text-sm text-center">
-            {successMessage}
-            <br />
-            Redirecting to login in 5 seconds...
-          </div>
-        )}
+                    setIsLoading(true);
+                    setErrors({});
+                    setSuccessMessage("");
 
-        {errors.general && (
-          <div className="bg-red-100 text-red-700 p-3 rounded-lg text-sm text-center">
-            {errors.general}
-          </div>
-        )}
+                    const res = await fetch("http://localhost:5000/auth/forgot-password", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            email: formData.email
+                        })
+                    });
 
-        <div>
-          <div className="relative">
+                    const data = await res.json();
 
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    // الرسالة اللي جاية من الباك
+                    setSuccessMessage(data.message);
 
-            <input
-              type="email"
-              placeholder="Email Address"
-              value={formData.email}
-              onChange={(e) => handleInputChange("email", e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-muted/50 border rounded-xl placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all border-input"
-            />
+                    // يرجع للوجين بعد 5 ثواني
+                    setTimeout(() => {
+                        resetFormState();
+                        setAuthMode("login");
+                    }, 5000);
 
-          </div>
-        </div>
+                } catch (error) {
 
-        <button
-          type="button"
-          onClick={handleResetSubmit}
-          disabled={isLoading || !formData.email}
-          className="w-full relative bg-primary text-primary-foreground font-medium py-3 px-6 rounded-xl hover:opacity-90 disabled:opacity-50"
-        >
+                    console.error("Reset password error:", error);
 
-          <span className="flex items-center justify-center gap-2">
+                    setErrors({
+                        general: "Server error. Please try again."
+                    });
 
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <>
-                <KeyRound className="h-5 w-5" />
-                Send Reset Link
-              </>
-            )}
+                } finally {
 
-          </span>
+                    setIsLoading(false);
 
-        </button>
+                }
+            };
 
-        <div className="text-center">
+            return (
 
-          <button
-            type="button"
-            onClick={() => {
-                resetFormState();
-                setAuthMode("login");
-            }}
-            className="text-primary hover:text-primary/80 text-sm"
-          >
-            Back to Login
-          </button>
+                <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-5">
 
-        </div>
+                    <div className="text-center mb-6 pt-4">
+                        <KeyRound className="h-10 w-10 text-primary mx-auto mb-3 opacity-80" />
+                    </div>
+                    <div>
+                        <div className="relative">
 
-      </div>
-    );
-  }
+                            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+
+                            <input
+                                type="email"
+                                placeholder="Email Address"
+                                value={formData.email}
+                                onChange={(e) => handleInputChange("email", e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 bg-muted/50 border rounded-xl placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all border-input"
+                            />
+
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={handleResetSubmit}
+                        disabled={isLoading || !formData.email}
+                        className="w-full relative bg-primary text-primary-foreground font-medium py-3 px-6 rounded-xl hover:opacity-90 disabled:opacity-50"
+                    >
+
+                        <span className="flex items-center justify-center gap-2">
+
+                            {isLoading ? (
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                                <>
+                                    <KeyRound className="h-5 w-5" />
+                                    Send Reset Link
+                                </>
+                            )}
+
+                        </span>
+
+                    </button>
+
+                    <div className="text-center">
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                resetFormState();
+                                setAuthMode("login");
+                            }}
+                            className="text-primary hover:text-primary/80 text-sm"
+                        >
+                            Back to Login
+                        </button>
+
+                    </div>
+
+                </div>
+            );
+        }
 
         // Email verification step
         if (authMode === 'signup' && registrationStep === 'verification') {
@@ -717,29 +705,54 @@ const renderAuthContent = () => {
         return (
             <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-5">
                 {authMode === 'signup' && (
-                    <div>
-                        <div className="relative">
+                    <div className="flex gap-3">
+                        <div className="relative flex-1">
                             <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                             <input
                                 type="text"
-                                placeholder="Full Name"
-                                value={formData.name}
-                                onChange={(e) => handleInputChange('name', e.target.value)}
-                                onBlur={() => handleFieldBlur('name')}
+                                placeholder="First Name"
+                                value={formData.firstName}
+                                onChange={(e) => handleInputChange('firstName', e.target.value)}
+                                onBlur={() => handleFieldBlur('firstName')}
                                 className={cn(
                                     "w-full pl-10 pr-4 py-3 bg-muted/50 border rounded-xl placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all",
-                                    errors.name ? "border-destructive" : "border-input"
+                                    errors.firstName ? "border-destructive" : "border-input"
                                 )}
-                                aria-label="Full Name"
-                                aria-describedby={errors.name ? 'name-error' : undefined}
+                                aria-label="First Name"
+                                aria-describedby={errors.firstName ? 'firstname-error' : undefined}
                             />
-                            {errors.name && (
+                            {errors.firstName && (
                                 <p
-                                    id="name-error"
+                                    id="firstname-error"
                                     className="text-destructive text-xs mt-1 flex items-center gap-1"
                                 >
                                     <AlertTriangle className="h-3 w-3" />
-                                    {errors.name}
+                                    {errors.firstName}
+                                </p>
+                            )}
+                        </div>
+                        <div className="relative flex-1">
+                            <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <input
+                                type="text"
+                                placeholder="Last Name"
+                                value={formData.lastName}
+                                onChange={(e) => handleInputChange('lastName', e.target.value)}
+                                onBlur={() => handleFieldBlur('lastName')}
+                                className={cn(
+                                    "w-full pl-10 pr-4 py-3 bg-muted/50 border rounded-xl placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all",
+                                    errors.lastName ? "border-destructive" : "border-input"
+                                )}
+                                aria-label="Last Name"
+                                aria-describedby={errors.lastName ? 'lastname-error' : undefined}
+                            />
+                            {errors.lastName && (
+                                <p
+                                    id="lastname-error"
+                                    className="text-destructive text-xs mt-1 flex items-center gap-1"
+                                >
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {errors.lastName}
                                 </p>
                             )}
                         </div>

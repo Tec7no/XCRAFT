@@ -64,7 +64,13 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
 
   const previewProducts = React.useMemo(() => {
     if (!searchTerm) return [];
-    return products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 5);
+    const sq = searchTerm.toLowerCase();
+    return products.filter(p => {
+      const matchName = p.name?.toLowerCase().includes(sq);
+      const matchAr = p.name_ar?.toLowerCase().includes(sq);
+      const matchEn = p.name_en?.toLowerCase().includes(sq);
+      return matchName || matchAr || matchEn;
+    }).slice(0, 5);
   }, [searchTerm, products]);
 
   const { cartCount } = useCart();
@@ -171,18 +177,13 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
                 onChange={(e) => {
                   const val = e.target.value;
                   onSearchChange(val);
-                  setSearchTerm(val); // Local state for preview
-
-                  if (window.location.pathname !== '/') {
-                    navigate(`/?q=${val}`, { replace: true });
-                  }
+                  setSearchTerm(val);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    setIsSearchOpen(false); // Close preview on enter if desired, or keep open
-                    if (window.location.pathname === '/') {
-                      document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
-                    }
+                    setIsSearchOpen(false);
+                    onNavigate(null);
+                    navigate(`/shop?q=${searchTerm}`);
                   }
                 }}
                 className={`transition-all duration-300 bg-muted border border-border rounded-full outline-none text-xs px-4 py-2 text-primary placeholder-muted-foreground ${isSearchOpen ? 'w-[100px] xs:w-32 md:w-64 opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
@@ -194,7 +195,7 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
                   } else {
                     const inputElement = document.querySelector('input[type="text"][placeholder="' + t('searchPlaceholder') + '"]') as HTMLInputElement;
                     if (inputElement && inputElement.value.trim().length > 0) {
-                      if (window.location.pathname === '/') {
+                      if (window.location.pathname === '/' || window.location.pathname === '/shop') {
                         document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
                       }
                       // Also close the dropdown if open? Maybe handled by click outside?
@@ -218,7 +219,8 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
                       {previewProducts.map(product => (
                         <div
                           key={product.id}
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault();
                             navigate(`/product/${product.id}`);
                             setSearchTerm('');
                             setIsSearchOpen(false);
@@ -238,13 +240,11 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
                         </div>
                       ))}
                       <div
-                        onClick={() => {
-                          if (window.location.pathname === '/') {
-                            document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
-                          } else {
-                            navigate(`/?q=${searchTerm}`);
-                          }
-                          setSearchTerm('');
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIsSearchOpen(false);
+                          onNavigate(null);
+                          navigate(`/shop?q=${searchTerm}`);
                         }}
                         className="text-center py-2 border-t border-border mt-1 text-xs font-bold text-primary cursor-pointer hover:bg-muted"
                       >

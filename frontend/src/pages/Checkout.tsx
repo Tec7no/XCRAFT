@@ -28,7 +28,6 @@ export default function Checkout() {
     const [cart, setCart] = useStorageState<CartItem[]>('cart', []);
     const [products, setProducts] = useStorageState<Product[]>('products', []);
     const [user] = useStorageState<User | null>('user', null);
-    const [discounts] = useStorageState<Discount[]>('discounts', []);
 
     const [customerInfo, setCustomerInfo] = React.useState<CustomerInfo>({
         fullName: '',
@@ -60,18 +59,24 @@ export default function Checkout() {
     const delivery = subtotal >= shippingConfig.freeShippingThreshold ? 0 : shippingConfig.flatRateFee;
     const total = Math.max(0, subtotal - discountAmount + delivery);
 
-    const handleApplyCoupon = () => {
-        const found = discounts.find(d => d.code === promoCode.trim().toUpperCase() && d.active);
-        if (!found) {
-            toast({ title: "Invalid Coupon", description: "This code does not exist or is inactive.", variant: "destructive" });
-            return;
+    const handleApplyCoupon = async () => {
+        if (!promoCode.trim()) return;
+        try {
+            const res = await fetch('http://localhost:5000/coupons/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: promoCode.trim().toUpperCase(), orderAmount: subtotal }),
+            });
+            const data = await res.json();
+            if (!data.success) {
+                toast({ title: "Invalid Coupon", description: data.message, variant: "destructive" });
+                return;
+            }
+            setAppliedDiscount(data.coupon);
+            toast({ title: "Coupon Applied!", description: `You saved with ${data.coupon.code}` });
+        } catch (err) {
+            toast({ title: "Error", description: "Could not validate coupon.", variant: "destructive" });
         }
-        if (found.minOrderAmount && subtotal < found.minOrderAmount) {
-            toast({ title: "Requirements Not Met", description: `Order must be at least ${found.minOrderAmount} EGP.`, variant: "destructive" });
-            return;
-        }
-        setAppliedDiscount(found);
-        toast({ title: "Coupon Applied!", description: `You saved with ${found.code}` });
     };
 
     const validateForm = (): boolean => {
@@ -170,6 +175,7 @@ export default function Checkout() {
                 discount: discountAmount,
                 delivery,
                 total,
+                couponCode: appliedDiscount?.code || null,
             });
 
             const order = res.order;
@@ -268,12 +274,20 @@ export default function Checkout() {
                                     </div>
                                 )}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_fullNameLabel')}</label>
-                                        <input type="text" value={customerInfo.fullName} onChange={e => setCustomerInfo(prev => ({ ...prev, fullName: e.target.value }))}
-                                            className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.fullName ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
-                                            placeholder="John Doe" />
-                                        {errors.fullName && <p className="text-red-500 text-[10px] mt-1">{errors.fullName}</p>}
+                                    <div className="md:col-span-2 grid grid-cols-2 gap-6 space-y-0">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">First Name</label>
+                                            <input type="text" value={customerInfo.fullName.split(' ')[0] || ''} onChange={e => setCustomerInfo(prev => ({ ...prev, fullName: `${e.target.value} ${prev.fullName.split(' ').slice(1).join(' ')}`.trim() }))}
+                                                className={`w-full p-3 border rounded-none text-sm bg-transparent ${errors.fullName ? 'border-red-500' : 'border-[#D8D2C8]'} focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                                placeholder="John" />
+                                            {errors.fullName && <p className="text-red-500 text-[10px] mt-1">{errors.fullName}</p>}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Last Name</label>
+                                            <input type="text" value={customerInfo.fullName.split(' ').slice(1).join(' ') || ''} onChange={e => setCustomerInfo(prev => ({ ...prev, fullName: `${prev.fullName.split(' ')[0] || ''} ${e.target.value}`.trim() }))}
+                                                className={`w-full p-3 border rounded-none text-sm bg-transparent border-[#D8D2C8] focus:border-[#C8A96A] outline-none transition-colors font-sans`}
+                                                placeholder="Doe" />
+                                        </div>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">{t('checkout_phoneLabel')}</label>

@@ -3,7 +3,12 @@ import Product from "../models/product.model";
 
 const mapProduct = (product: any) => {
   const obj = product.toObject ? product.toObject() : product;
-  return { ...obj, id: obj._id.toString() };
+  // Convert variantStock Map to plain object if needed
+  let variantStock = obj.variantStock;
+  if (variantStock && typeof variantStock.toObject === 'function') {
+    variantStock = variantStock.toObject();
+  }
+  return { ...obj, id: obj._id.toString(), variantStock };
 };
 
 export const getProducts = async (req: Request, res: Response) => {

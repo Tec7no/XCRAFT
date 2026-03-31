@@ -48,6 +48,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const handleAddToCart = () => {
     if (product && selectedColor && selectedSize) {
       onAddToCart(product, selectedColor.hex, selectedSize);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

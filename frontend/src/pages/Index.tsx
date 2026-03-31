@@ -186,7 +186,13 @@ const Index: React.FC<IndexProps> = ({ onToggleCompare, compareList }) => {
   const filteredProducts = React.useMemo(() => {
     return products.filter(p => {
       // 1. Search (Always global)
-      if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (searchQuery) {
+        const sq = searchQuery.toLowerCase();
+        const matchName = p.name?.toLowerCase().includes(sq);
+        const matchAr = p.name_ar?.toLowerCase().includes(sq);
+        const matchEn = p.name_en?.toLowerCase().includes(sq);
+        if (!matchName && !matchAr && !matchEn) return false;
+      }
 
       // 2. Categories
       if (filters.categories.length > 0) {

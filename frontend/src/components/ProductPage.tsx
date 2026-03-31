@@ -54,13 +54,12 @@ const ProductPage: React.FC<ProductPageProps> = ({
   const [quantity, setQuantity] = React.useState(1);
   const [quickViewProduct, setQuickViewProduct] = React.useState<Product | null>(null);
 
-  // Similar Products logic
-  const [allProducts] = useStorageState<Product[]>('products', []);
+  // Similar Products logic - use catalog from API
   const similarProducts = React.useMemo(() => {
-    return allProducts
+    return catalog
       .filter(p => p.category === product.category && p.id !== product.id)
       .slice(0, 4);
-  }, [allProducts, product]);
+  }, [catalog, product]);
 
   // Reviews state
   const [allReviews, setAllReviews] = useStorageState<Review[]>('product_reviews', []);
@@ -90,16 +89,19 @@ const ProductPage: React.FC<ProductPageProps> = ({
 
   // Helper to get variant stock for a size+color combination
   const getVariantQty = React.useCallback((size: string, hex: string): number => {
-    if (!product.variantStock) return 0;
+    if (!product.variantStock) return product.stock ?? 0;
     const key = makeVariantKey(size, hex);
-    return product.variantStock[key] ?? 0;
-  }, [product.variantStock]);
+    const stock = product.variantStock as any;
+    if (typeof stock.get === 'function') return stock.get(key) ?? 0;
+    return stock[key] ?? 0;
+  }, [product.variantStock, product.stock]);
 
   // Check if current selection is out of stock
   const selectedVariantStock = selectedSize && selectedColor
     ? getVariantQty(selectedSize, selectedColor.hex)
     : 0;
-  const outOfStock = product.stock <= 0 || selectedVariantStock <= 0;
+  const outOfStock = product.stock <= 0 || 
+    (selectedColor !== null && selectedSize !== null && selectedVariantStock <= 0);
 
 
   React.useEffect(() => {

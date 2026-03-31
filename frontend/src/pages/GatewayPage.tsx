@@ -28,8 +28,8 @@ const GatewayPage = () => {
 
     // Placeholder functions for Header props
     const handleSearch = (query) => {
-        console.log("Search query:", query);
-        navigate(`/shop?search=${query}`);
+        // Dropdown state is handled internally by Header.tsx.
+        // Navigation is handled on Enter or 'View All Results' click.
     };
 
     const handleNavigate = (category) => {
