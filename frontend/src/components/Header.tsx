@@ -60,7 +60,7 @@ const Header: React.FC<HeaderProps> = ({ onSearchChange, onNavigate, onAccount, 
   const { settings } = useSiteSettings();
   const { brand } = useDepartment();
   const navigate = useNavigate();
-  const products = useProducts();
+  const { products } = useProducts();
 
   const previewProducts = React.useMemo(() => {
     if (!searchTerm) return [];

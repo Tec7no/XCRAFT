@@ -30,7 +30,7 @@ interface AuthFormProps {
     /**
      * Callback triggered when authentication is successful
      */
-    onSuccess?: (userData: { email: string; name?: string; password?: string }) => void;
+    onSuccess?: (userData: { email: string; name?: string; password?: string; token?: string; role?: string; id?: string; phone?: string }) => void;
     /**
      * Callback triggered when the form should close
      */
@@ -362,12 +362,14 @@ export function AuthForm({
 
             setSuccessMessage("Login successful");
 
-            setTimeout(() => {
             onSuccess?.({
                 email: data.user.email,
-                name: data.user.name
+                name: data.user.name,
+                token: data.token,
+                role: data.user.role,
+                id: data.user.id,
+                phone: data.user.phone,
             });
-            }, 3000);
 
         }
 
@@ -445,7 +447,11 @@ export function AuthForm({
 
                 onSuccess?.({
                     email: signupData.user.email,
-                    name: signupData.user.name
+                    name: signupData.user.name,
+                    token: signupData.token,
+                    role: signupData.user.role,
+                    id: signupData.user.id,
+                    phone: signupData.user.phone,
                 });
 
             }

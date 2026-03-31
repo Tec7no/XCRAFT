@@ -4,6 +4,39 @@ import { DEFAULT_SITE_SETTINGS } from "./site-settings.default";
 // ==================== LOCALSTORAGE KEYS ====================
 const PUBLISHED_KEY = "XCRAFT_SITE_SETTINGS_PUBLISHED_V1";
 const DRAFT_KEY = "XCRAFT_SITE_SETTINGS_DRAFT_V1";
+const API_URL = "http://localhost:5000";
+
+// ==================== API HELPERS ====================
+function getAdminToken(): string | null {
+    try {
+        const raw = localStorage.getItem('townteam_user');
+        if (!raw) return null;
+        return JSON.parse(raw)?.token || null;
+    } catch { return null; }
+}
+
+export async function fetchSettingsFromDB(): Promise<SiteSettings | null> {
+    try {
+        const res = await fetch(`${API_URL}/site-settings`);
+        const data = await res.json();
+        if (data.success && data.settings) return data.settings as SiteSettings;
+        return null;
+    } catch { return null; }
+}
+
+export async function saveSettingsToDB(settings: SiteSettings): Promise<void> {
+    try {
+        const token = getAdminToken();
+        if (!token) return;
+        await fetch(`${API_URL}/site-settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ settings }),
+        });
+    } catch (err) {
+        console.error('Failed to save settings to DB:', err);
+    }
+}
 
 // ==================== PUBLISHED SETTINGS ====================
 // Used by the public customer-facing site
@@ -89,11 +122,13 @@ export function saveDraftSettings(next: SiteSettings): void {
 // ==================== PUBLISH / RESET ACTIONS ====================
 
 /**
- * Publish draft to production - copies draft settings to published.
+ * Publish draft to production - copies draft settings to published + syncs to DB.
  */
 export function publishDraft(): void {
     const draft = loadDraftSettings();
     savePublishedSettings(draft);
+    // Fire-and-forget sync to MongoDB
+    saveSettingsToDB(draft);
 }
 
 /**

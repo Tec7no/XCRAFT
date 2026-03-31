@@ -76,7 +76,7 @@ const Index: React.FC<IndexProps> = ({ onToggleCompare, compareList }) => {
   // Products should be read-only from localStorage - only admin can modify them
   // But we need to reload when admin changes them
   // Products (Centralized Hook)
-  const products = useProducts();
+  const { products } = useProducts();
 
   // const [cart, setCart] = useStorageState<CartItem[]>('cart', []); // Removed
   const [orders, setOrders] = useStorageState<Order[]>('orders', []);

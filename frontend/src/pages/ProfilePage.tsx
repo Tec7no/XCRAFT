@@ -1,8 +1,9 @@
 import React from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import { useStorageState } from '@/utils/storage';
+import { useStorageState, removeStorageItem } from '@/utils/storage';
 import { CartItem, User, Order, Address } from '@/types';
+import { useMyOrders } from '@/hooks/useOrders';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { User as UserIcon, Package, MapPin, Plus, Trash2, Edit2, LogOut } from 'lucide-react';
@@ -18,7 +19,7 @@ const ProfilePage = () => {
     const { lang, t } = useLanguage();
     const [user, setUser] = useStorageState<User | null>('user', null);
     const [cart] = useStorageState<CartItem[]>('cart', []);
-    const [orders] = useStorageState<Order[]>('orders', []);
+    const { orders } = useMyOrders();
     const [wishlist] = useStorageState<string[]>('wishlist', []);
 
     // Address State
@@ -36,11 +37,12 @@ const ProfilePage = () => {
     }
 
     const handleLogout = () => {
+        removeStorageItem('user');
         setUser(null);
         navigate('/');
     };
 
-    const handleSaveAddress = (e: React.FormEvent) => {
+    const handleSaveAddress = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newAddress.fullName || !newAddress.address || !newAddress.city || !newAddress.phone || !newAddress.name) {
             toast({ title: "Validation Error", description: "Please fill all fields", variant: "destructive" });
@@ -49,41 +51,51 @@ const ProfilePage = () => {
 
         const address: Address = {
             id: crypto.randomUUID(),
-            name: newAddress.name,
-            fullName: newAddress.fullName,
-            phone: newAddress.phone,
-            address: newAddress.address,
-            city: newAddress.city,
-            isDefault: user.addresses?.length === 0 // Make default if first
+            name: newAddress.name!,
+            fullName: newAddress.fullName!,
+            phone: newAddress.phone!,
+            address: newAddress.address!,
+            city: newAddress.city!,
+            isDefault: user.addresses?.length === 0
         };
 
-        const updatedUser = {
-            ...user,
-            addresses: [...(user.addresses || []), address]
-        };
-        setUser(updatedUser);
-        setIsAddingAddress(false);
-        setNewAddress({});
-        toast({ title: t('profile_address_saved'), description: t('profile_address_saved_desc') });
+        const updatedAddresses = [...(user.addresses || []), address];
+
+        try {
+            const { authApi } = await import('@/lib/api');
+            await authApi.updateProfile({ addresses: updatedAddresses });
+            setUser({ ...user, addresses: updatedAddresses });
+            setIsAddingAddress(false);
+            setNewAddress({});
+            toast({ title: t('profile_address_saved'), description: t('profile_address_saved_desc') });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        }
     };
 
-    const handleDeleteAddress = (id: string) => {
+    const handleDeleteAddress = async (id: string) => {
         if (!user.addresses) return;
-        const updatedUser = {
-            ...user,
-            addresses: user.addresses.filter(a => a.id !== id)
-        };
-        setUser(updatedUser);
+        const updatedAddresses = user.addresses.filter(a => a.id !== id);
+        try {
+            const { authApi } = await import('@/lib/api');
+            await authApi.updateProfile({ addresses: updatedAddresses });
+            setUser({ ...user, addresses: updatedAddresses });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        }
     };
 
-    const handleSetDefault = (id: string) => {
+    const handleSetDefault = async (id: string) => {
         if (!user.addresses) return;
-        const updatedUser = {
-            ...user,
-            addresses: user.addresses.map(a => ({ ...a, isDefault: a.id === id }))
-        };
-        setUser(updatedUser);
-        toast({ title: t('profile_default_updated'), description: t('profile_default_updated_desc') });
+        const updatedAddresses = user.addresses.map(a => ({ ...a, isDefault: a.id === id }));
+        try {
+            const { authApi } = await import('@/lib/api');
+            await authApi.updateProfile({ addresses: updatedAddresses });
+            setUser({ ...user, addresses: updatedAddresses });
+            toast({ title: t('profile_default_updated'), description: t('profile_default_updated_desc') });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        }
     };
 
     const handleNavigate = (path: string | null) => {

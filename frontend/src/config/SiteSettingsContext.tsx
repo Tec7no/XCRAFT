@@ -8,7 +8,8 @@ import {
     saveDraftSettings,
     publishDraft as publishDraftStorage,
     resetDraftToPublished as resetDraftStorage,
-    resetAllToDefault
+    resetAllToDefault,
+    fetchSettingsFromDB,
 } from "./site-settings.storage";
 import { applyThemeToDocument } from "./applyTheme";
 
@@ -46,6 +47,21 @@ export function SiteSettingsProvider({ children, forceEditorMode }: SiteSettings
         applyThemeToDocument(loaded.theme);
         return loaded;
     });
+
+    // On mount, fetch settings from DB and override localStorage
+    useEffect(() => {
+        fetchSettingsFromDB().then(dbSettings => {
+            if (dbSettings) {
+                setSettings(prev => ({ ...prev, ...dbSettings }));
+                if (isEditorMode) {
+                    saveDraftSettings(dbSettings);
+                } else {
+                    savePublishedSettings(dbSettings);
+                }
+                applyThemeToDocument(dbSettings.theme);
+            }
+        });
+    }, [isEditorMode]);
 
     // Debounced save - saves to appropriate storage based on mode
     useEffect(() => {

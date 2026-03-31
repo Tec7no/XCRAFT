@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React, { useState, useRef } from "react";
 import { getStorageItem } from "@/utils/storage";
-import { publishDraft, resetDraftToPublished } from "@/config/site-settings.storage";
+import { publishDraft, resetDraftToPublished, loadPublishedSettings, saveSettingsToDB } from "@/config/site-settings.storage";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,10 @@ export default function SiteEditorPage() {
     const handlePublish = async () => {
         setIsPublishing(true);
         try {
-            publishDraft();
+            publishDraft(); // saves to localStorage + fires DB sync
+            // Also explicitly sync to DB
+            const published = loadPublishedSettings();
+            await saveSettingsToDB(published);
 
             toast({
                 title: lang === 'ar' ? 'تم النشر!' : 'Published!',
@@ -61,7 +64,6 @@ export default function SiteEditorPage() {
                     : 'Changes are now visible to customers.',
             });
 
-            // Optionally reload iframe to show fresh state
             if (iframeRef.current && iframeRef.current.contentWindow) {
                 iframeRef.current.contentWindow.location.reload();
             }

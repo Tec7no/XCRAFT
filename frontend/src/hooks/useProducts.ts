@@ -1,68 +1,92 @@
-import { useState, useEffect } from 'react';
+// src/hooks/useProducts.ts
+// Fetches products from the backend API
+// Falls back to INITIAL_PRODUCTS if API is unreachable (dev/demo mode)
+
+import { useState, useEffect, useCallback } from 'react';
 import { Product } from '../types';
+import { productsApi } from '../lib/api';
 import { INITIAL_PRODUCTS } from '../constants';
 
-export const useProducts = () => {
-    // Products should be read-only from localStorage - only admin can modify them
-    // But we need to reload when admin changes them
-    const [products, setProducts] = useState<Product[]>(() => {
-        try {
-            if (typeof window !== 'undefined') {
-                const stored = localStorage.getItem('townteam_products');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    return (Array.isArray(parsed) && parsed.length > 0) ? parsed : INITIAL_PRODUCTS;
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to load products from localStorage:', e);
+interface UseProductsOptions {
+  category?: string;
+  badge?: string;
+  featured?: string;
+  search?: string;
+}
+
+export const useProducts = (options?: UseProductsOptions) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await productsApi.getAll(options);
+      setProducts(data.products || []);
+    } catch (err: any) {
+      console.warn("API unavailable, falling back to local products:", err.message);
+      // Graceful fallback to localStorage / INITIAL_PRODUCTS
+      try {
+        const stored = localStorage.getItem('townteam_products');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setProducts(Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_PRODUCTS);
+        } else {
+          setProducts(INITIAL_PRODUCTS);
         }
-        return INITIAL_PRODUCTS;
-    });
+      } catch {
+        setProducts(INITIAL_PRODUCTS);
+      }
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [options?.category, options?.badge, options?.featured, options?.search]);
 
-    // Listen for product changes from admin
-    useEffect(() => {
-        const handleStorageChange = (e: StorageEvent | Event) => {
-            if (e instanceof StorageEvent) {
-                if (e.key === 'townteam_products') {
-                    try {
-                        const stored = localStorage.getItem('townteam_products');
-                        if (stored) {
-                            const parsed = JSON.parse(stored);
-                            if (Array.isArray(parsed)) {
-                                setProducts(parsed);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('Failed to reload products:', err);
-                    }
-                }
-            } else if (e.type === 'townteam_storage') {
-                const customEvent = e as CustomEvent;
-                if (customEvent.detail && customEvent.detail.key === 'townteam_products') {
-                    try {
-                        const stored = localStorage.getItem('townteam_products');
-                        if (stored) {
-                            const parsed = JSON.parse(stored);
-                            if (Array.isArray(parsed)) {
-                                setProducts(parsed);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('Failed to reload products:', err);
-                    }
-                }
-            }
-        };
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
-        window.addEventListener('storage', handleStorageChange);
-        window.addEventListener('townteam_storage', handleStorageChange);
+  return { products, loading, error, refetch: fetchProducts };
+};
 
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            window.removeEventListener('townteam_storage', handleStorageChange);
-        };
-    }, []);
+// ─── Admin version: full CRUD ──────────────────────────────────────────────────
+export const useAdminProducts = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    return products;
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await productsApi.getAll();
+      setProducts(data.products || []);
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  const createProduct = async (productData: Partial<Product>) => {
+    const data = await productsApi.create(productData);
+    setProducts(prev => [data.product, ...prev]);
+    return data.product;
+  };
+
+  const updateProduct = async (id: string, productData: Partial<Product>) => {
+    const data = await productsApi.update(id, productData);
+    setProducts(prev => prev.map(p => p.id === id ? data.product : p));
+    return data.product;
+  };
+
+  const deleteProduct = async (id: string) => {
+    await productsApi.delete(id);
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  return { products, loading, refetch: fetchProducts, createProduct, updateProduct, deleteProduct };
 };

@@ -42,8 +42,6 @@ import CartDrawer from "./components/cart/CartDrawer";
 import WishlistDrawer from "./components/wishlist/WishlistDrawer";
 import ResetPasswordPage from './pages/ResetPasswordPage';
 
-<Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-
 // Lazy Load Components
 const AuthPage = React.lazy(() => import("./components/AuthPage"));
 const AdminPage = React.lazy(() => import("./pages/AdminPage"));
@@ -73,19 +71,15 @@ const AuthRoute = () => {
     }
   }, [user, navigate, redirectPath]);
 
-  const handleLogin = (newUser: User) => {
-    // CRITICAL: Write to storage SYNCHRONOUSLY
-    // Our updated setStorageItem now dispatches a 'townteam_storage' event
-    // which ensures all components (like AdminPage) stay in sync immediately.
+  const handleLogin = (newUser: any) => {
     import('./utils/storage').then(({ setStorageItem }) => {
+      // newUser contains token — save as-is
       setStorageItem('user', newUser);
       setUser(newUser);
 
-      // Navigation is now safer as state is synced
       if (newUser.role === 'admin' || newUser.role === 'manager') {
         navigate('/admin/dashboard', { replace: true });
       } else {
-        // Redirection logic: use ?redirect=... or default to /shop
         navigate(redirectPath || '/shop', { replace: true });
       }
     });
@@ -189,6 +183,7 @@ const App = () => {
 
                           {/* Authentication */}
                           <Route path="/auth" element={<AuthRoute />} />
+                          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
                           {/* Core Pages */}
                           <Route path="/checkout" element={<Checkout />} />
@@ -210,6 +205,7 @@ const App = () => {
                           <Route path="/auth-demo" element={<AuthDemo />} />
 
                           {/* Admin Routes */}
+                          <Route path="/admin" element={<AdminPage />} />
                           <Route path="/admin/dashboard" element={
                             <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading Dashboard...</div>}>
                               <AdminPage />

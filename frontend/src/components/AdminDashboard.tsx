@@ -72,7 +72,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
   const { settings, updateSettings, publishDraft } = useSiteSettings();
   const { lang, t, toggleLang } = useLanguage();
   const [activeTab, setActiveTab] = React.useState<AdminTab>('overview');
-  const [discounts, setDiscounts] = useStorageState<Discount[]>('discounts', []);
+  const [discounts, setDiscounts] = React.useState<Discount[]>([]);
+  const [couponsLoading, setCouponsLoading] = React.useState(false);
+
+  // Fetch coupons from API on mount
+  React.useEffect(() => {
+    const fetchCoupons = async () => {
+      try {
+        const raw = localStorage.getItem('townteam_user');
+        const token = raw ? JSON.parse(raw)?.token : null;
+        if (!token) return;
+        const res = await fetch('http://localhost:5000/coupons', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) setDiscounts(data.coupons);
+      } catch (err) {
+        console.error('Failed to fetch coupons:', err);
+      }
+    };
+    fetchCoupons();
+  }, []);
   const [search, setSearch] = React.useState('');
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [isAdding, setIsAdding] = React.useState(false);
@@ -83,12 +103,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
   const [contentTab, setContentTab] = React.useState('gateway');
   const [settingsTab, setSettingsTab] = React.useState('shipping');
   const [adminCreds, setAdminCreds] = React.useState(() => {
-    return JSON.parse(localStorage.getItem('admin_credentials') || JSON.stringify({
-      name: 'Admin User',
-      email: 'admin@xcraft.com',
-      image: 'https://ui-avatars.com/api/?name=Admin+User&background=0D8ABC&color=fff',
-    }));
+    try {
+      const raw = localStorage.getItem('townteam_user');
+      if (!raw) return { name: '', email: '' };
+      const u = JSON.parse(raw);
+      return { name: u.name || '', email: u.email || '' };
+    } catch { return { name: '', email: '' }; }
   });
+  const [passwordForm, setPasswordForm] = React.useState({ current: '', next: '', confirm: '' });
+  const [accountLoading, setAccountLoading] = React.useState(false);
 
   const canAdd = userRole === 'admin' || userRole === 'manager';
   const canEdit = userRole === 'admin' || userRole === 'manager';
@@ -166,8 +189,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 publishDraft(settings);
+                // Also sync to MongoDB
+                try {
+                  const raw = localStorage.getItem('townteam_user');
+                  const token = raw ? JSON.parse(raw)?.token : null;
+                  await fetch('http://localhost:5000/site-settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ settings }),
+                  });
+                } catch (err) {
+                  console.error('Failed to sync settings to DB:', err);
+                }
                 toast({
                   title: t('admin_save_changes'),
                   description: t('admin_save_changes_desc')
@@ -623,26 +658,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                     min="0"
                   />
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       const codeInput = document.getElementById('new-coupon-code') as HTMLInputElement;
                       const typeInput = document.getElementById('new-coupon-type') as HTMLInputElement;
                       const valueInput = document.getElementById('new-coupon-value') as HTMLInputElement;
 
                       if (codeInput.value && valueInput.value) {
-                        const newCoupon: Discount = {
-                          id: Date.now().toString(),
-                          code: codeInput.value.toUpperCase(),
-                          type: (typeInput.value as 'percentage' | 'fixed') || 'percentage',
-                          value: Number(valueInput.value),
-                          active: true,
-                          usageCount: 0
-                        };
-                        setDiscounts([...discounts, newCoupon]);
-                        toast({ title: t('admin_coupon_created'), description: t('admin_coupon_created_desc').replace('{{code}}', newCoupon.code) });
-
-                        // Reset
-                        codeInput.value = '';
-                        valueInput.value = '';
+                        setCouponsLoading(true);
+                        try {
+                          const raw = localStorage.getItem('townteam_user');
+                          const token = raw ? JSON.parse(raw)?.token : null;
+                          const res = await fetch('http://localhost:5000/coupons', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({
+                              code: codeInput.value.toUpperCase(),
+                              type: (typeInput.value as 'percentage' | 'fixed') || 'percentage',
+                              value: Number(valueInput.value),
+                            }),
+                          });
+                          const data = await res.json();
+                          if (!data.success) throw new Error(data.message);
+                          setDiscounts(prev => [...prev, data.coupon]);
+                          toast({ title: t('admin_coupon_created'), description: t('admin_coupon_created_desc').replace('{{code}}', data.coupon.code) });
+                          codeInput.value = '';
+                          valueInput.value = '';
+                        } catch (err: any) {
+                          toast({ title: t('admin_coupon_error'), description: err.message, variant: "destructive" });
+                        } finally {
+                          setCouponsLoading(false);
+                        }
                       } else {
                         toast({ title: t('admin_coupon_error'), description: t('admin_coupon_error_desc'), variant: "destructive" });
                       }
@@ -673,8 +718,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setDiscounts(discounts.map(d => d.id === coupon.id ? { ...d, active: !d.active } : d));
+                          onClick={async () => {
+                            try {
+                              const raw = localStorage.getItem('townteam_user');
+                              const token = raw ? JSON.parse(raw)?.token : null;
+                              const res = await fetch(`http://localhost:5000/coupons/${coupon.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                body: JSON.stringify({ active: !coupon.active }),
+                              });
+                              const data = await res.json();
+                              if (data.success) setDiscounts(discounts.map(d => d.id === coupon.id ? data.coupon : d));
+                            } catch (err) {
+                              toast({ title: 'Error', description: 'Failed to update coupon', variant: 'destructive' });
+                            }
                           }}
                           className="flex-1"
                         >
@@ -683,9 +740,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => {
+                          onClick={async () => {
                             if (confirm(t('admin_coupon_delete_confirm'))) {
-                              setDiscounts(discounts.filter(d => d.id !== coupon.id));
+                              try {
+                                const raw = localStorage.getItem('townteam_user');
+                                const token = raw ? JSON.parse(raw)?.token : null;
+                                const res = await fetch(`http://localhost:5000/coupons/${coupon.id}`, {
+                                  method: 'DELETE',
+                                  headers: { 'Authorization': `Bearer ${token}` },
+                                });
+                                const data = await res.json();
+                                if (data.success) setDiscounts(discounts.filter(d => d.id !== coupon.id));
+                              } catch (err) {
+                                toast({ title: 'Error', description: 'Failed to delete coupon', variant: 'destructive' });
+                              }
                             }
                           }}
                         >
@@ -1085,7 +1153,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                           <div className="bg-muted/40 p-4 rounded-lg space-y-4">
                             <Label>{t('nav_cart')} / {t('admin_link')}</Label>
                             {column.links.map((link, linkIdx) => (
-                              <div className="flex flex-col gap-2 flex-1">
+                              <div key={link.id || linkIdx} className="flex flex-col gap-2 flex-1">
                                 <div className="flex gap-2 items-center">
                                   <Input
                                     value={link.label}
@@ -1452,48 +1520,98 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
         }
         {
           activeTab === 'account' && (
-            <div className="max-w-md mx-auto animate-fade-in-up">
+            <div className="max-w-5xl mx-auto animate-fade-in-up grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* Profile Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle>{t('admin_account_title')}</CardTitle>
+                  <CardTitle>Account Info</CardTitle>
+                  <p className="text-sm text-muted-foreground">Your admin account details</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {t('admin_account_desc')}
-                  </p>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>{t('admin_auth_email')}</Label>
-                      <Input
-                        value={adminCreds.email}
-                        onChange={(e) => setAdminCreds({ ...adminCreds, email: e.target.value })}
-                        placeholder="admin@example.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t('admin_auth_password')}</Label>
-                      <Input
-                        type="password"
-                        value={adminCreds.password}
-                        onChange={(e) => setAdminCreds({ ...adminCreds, password: e.target.value })}
-                        placeholder="••••••••"
-                      />
-                    </div>
-                    <Button
-                      className="w-full mt-4"
-                      onClick={() => {
-                        localStorage.setItem('admin_credentials', JSON.stringify(adminCreds));
-                        toast({
-                          title: t('admin_account_updated_title'),
-                          description: t('admin_account_updated_desc')
-                        });
-                      }}
-                    >
-                      {t('profile_saveChanges')}
-                    </Button>
+                  <div className="space-y-2">
+                    <Label>Full Name</Label>
+                    <Input value={adminCreds.name} disabled className="bg-muted/50" />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input value={adminCreds.email} disabled className="bg-muted/50" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">To update your name or email, contact the system administrator.</p>
                 </CardContent>
               </Card>
+
+              {/* Change Password */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Change Password</CardTitle>
+                  <p className="text-sm text-muted-foreground">Update your login password</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Current Password</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>New Password</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      value={passwordForm.next}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confirm New Password</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    className="w-full mt-2"
+                    disabled={accountLoading || !passwordForm.current || !passwordForm.next || !passwordForm.confirm}
+                    onClick={async () => {
+                      if (passwordForm.next !== passwordForm.confirm) {
+                        toast({ title: 'Error', description: 'New passwords do not match', variant: 'destructive' });
+                        return;
+                      }
+                      if (passwordForm.next.length < 8) {
+                        toast({ title: 'Error', description: 'Password must be at least 8 characters', variant: 'destructive' });
+                        return;
+                      }
+                      setAccountLoading(true);
+                      try {
+                        const raw = localStorage.getItem('townteam_user');
+                        const token = raw ? JSON.parse(raw)?.token : null;
+                        const res = await fetch('http://localhost:5000/auth/change-password', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.next }),
+                        });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.message);
+                        setPasswordForm({ current: '', next: '', confirm: '' });
+                        toast({ title: 'Password Updated', description: 'Your password has been changed successfully.' });
+                      } catch (err: any) {
+                        toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                      } finally {
+                        setAccountLoading(false);
+                      }
+                    }}
+                  >
+                    {accountLoading ? 'Updating...' : 'Update Password'}
+                  </Button>
+                </CardContent>
+              </Card>
+
             </div>
           )
         }
