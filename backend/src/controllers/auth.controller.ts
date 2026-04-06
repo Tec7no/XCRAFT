@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { generateOtp, checkOtp } from "../services/otp.service";
-import { sendMail } from "../utils/mail";
+import { sendOtpMail, sendResetMail } from "../utils/mail";
 import User from "../models/user.model";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -10,7 +10,7 @@ export const sendOtp = async (req: Request, res: Response) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ success: false, message: "Email is required" });
     const otp = generateOtp(email);
-    await sendMail(email, `Your verification code is: ${otp}. Valid for 5 minutes.`);
+    await sendOtpMail(email, otp);
     return res.json({ success: true, message: "OTP sent to email" });
   } catch (error) {
     console.error("Send OTP Error:", error);
@@ -44,7 +44,13 @@ export const signup = async (req: Request, res: Response) => {
     if (existingUser) return res.status(400).json({ success: false, message: "Email already registered" });
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashedPassword, phone, verified: true });
-    return res.json({ success: true, message: "Account created successfully", user });
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET as string, { expiresIn: "7d" });
+    return res.json({
+      success: true,
+      message: "Account created successfully",
+      token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone },
+    });
   } catch (error: any) {
     console.error("Signup Error:", error);
     return res.status(500).json({ success: false, message: error.message });
@@ -64,7 +70,7 @@ export const loginUser = async (req: Request, res: Response) => {
       success: true,
       message: "Login successful",
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, verified: user.verified },
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, verified: user.verified },
     });
   } catch (error: any) {
     console.error("Login Error:", error);
@@ -79,7 +85,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ success: false, message: "If the email exists, a reset link has been sent" });
     const resetToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET as string, { expiresIn: "15m" });
     const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-    await sendMail(email, `Reset your password: ${resetLink}`);
+    await sendResetMail(email, resetLink);
     return res.json({ success: true, message: "If the email exists, a reset link has been sent" });
   } catch (error: any) {
     console.error("Forgot Password Error:", error);

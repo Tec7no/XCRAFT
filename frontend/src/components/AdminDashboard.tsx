@@ -72,27 +72,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
   const { settings, updateSettings, publishDraft } = useSiteSettings();
   const { lang, t, toggleLang } = useLanguage();
   const [activeTab, setActiveTab] = React.useState<AdminTab>('overview');
-  const [discounts, setDiscounts] = React.useState<Discount[]>([]);
-  const [couponsLoading, setCouponsLoading] = React.useState(false);
-
-  // Fetch coupons from API on mount
-  React.useEffect(() => {
-    const fetchCoupons = async () => {
-      try {
-        const raw = localStorage.getItem('townteam_user');
-        const token = raw ? JSON.parse(raw)?.token : null;
-        if (!token) return;
-        const res = await fetch('http://localhost:5000/coupons', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
-        if (data.success) setDiscounts(data.coupons);
-      } catch (err) {
-        console.error('Failed to fetch coupons:', err);
-      }
-    };
-    fetchCoupons();
-  }, []);
+  const [discounts, setDiscounts] = useStorageState<Discount[]>('discounts', []);
   const [search, setSearch] = React.useState('');
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [isAdding, setIsAdding] = React.useState(false);
@@ -189,20 +169,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
+              onClick={() => {
                 publishDraft(settings);
-                // Also sync to MongoDB
-                try {
-                  const raw = localStorage.getItem('townteam_user');
-                  const token = raw ? JSON.parse(raw)?.token : null;
-                  await fetch('http://localhost:5000/site-settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ settings }),
-                  });
-                } catch (err) {
-                  console.error('Failed to sync settings to DB:', err);
-                }
                 toast({
                   title: t('admin_save_changes'),
                   description: t('admin_save_changes_desc')
@@ -476,13 +444,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (window.confirm(t('admin_product_delete_confirm'))) {
-                                      setProducts(products.filter(p => p.id !== product.id));
-                                      toast({
-                                        title: t('admin_product_deleted_title'),
-                                        description: t('admin_product_deleted_desc')
-                                      });
+                                      try {
+                                        const raw = localStorage.getItem('townteam_user');
+                                        const token = raw ? JSON.parse(raw)?.token : null;
+                                        const res = await fetch(`http://localhost:5000/products/${product.id}`, {
+                                          method: 'DELETE',
+                                          headers: { 'Authorization': `Bearer ${token}` },
+                                        });
+                                        const data = await res.json();
+                                        if (!data.success) throw new Error(data.message);
+                                        setProducts(products.filter(p => p.id !== product.id));
+                                        toast({
+                                          title: t('admin_product_deleted_title'),
+                                          description: t('admin_product_deleted_desc')
+                                        });
+                                      } catch (err: any) {
+                                        toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                      }
                                     }
                                   }}
                                   disabled={!canDelete}
@@ -658,36 +638,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                     min="0"
                   />
                   <Button
-                    onClick={async () => {
+                    onClick={() => {
                       const codeInput = document.getElementById('new-coupon-code') as HTMLInputElement;
                       const typeInput = document.getElementById('new-coupon-type') as HTMLInputElement;
                       const valueInput = document.getElementById('new-coupon-value') as HTMLInputElement;
 
                       if (codeInput.value && valueInput.value) {
-                        setCouponsLoading(true);
-                        try {
-                          const raw = localStorage.getItem('townteam_user');
-                          const token = raw ? JSON.parse(raw)?.token : null;
-                          const res = await fetch('http://localhost:5000/coupons', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                            body: JSON.stringify({
-                              code: codeInput.value.toUpperCase(),
-                              type: (typeInput.value as 'percentage' | 'fixed') || 'percentage',
-                              value: Number(valueInput.value),
-                            }),
-                          });
-                          const data = await res.json();
-                          if (!data.success) throw new Error(data.message);
-                          setDiscounts(prev => [...prev, data.coupon]);
-                          toast({ title: t('admin_coupon_created'), description: t('admin_coupon_created_desc').replace('{{code}}', data.coupon.code) });
-                          codeInput.value = '';
-                          valueInput.value = '';
-                        } catch (err: any) {
-                          toast({ title: t('admin_coupon_error'), description: err.message, variant: "destructive" });
-                        } finally {
-                          setCouponsLoading(false);
-                        }
+                        const newCoupon: Discount = {
+                          id: Date.now().toString(),
+                          code: codeInput.value.toUpperCase(),
+                          type: (typeInput.value as 'percentage' | 'fixed') || 'percentage',
+                          value: Number(valueInput.value),
+                          active: true,
+                          usageCount: 0
+                        };
+                        setDiscounts([...discounts, newCoupon]);
+                        toast({ title: t('admin_coupon_created'), description: t('admin_coupon_created_desc').replace('{{code}}', newCoupon.code) });
+
+                        // Reset
+                        codeInput.value = '';
+                        valueInput.value = '';
                       } else {
                         toast({ title: t('admin_coupon_error'), description: t('admin_coupon_error_desc'), variant: "destructive" });
                       }
@@ -718,20 +688,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={async () => {
-                            try {
-                              const raw = localStorage.getItem('townteam_user');
-                              const token = raw ? JSON.parse(raw)?.token : null;
-                              const res = await fetch(`http://localhost:5000/coupons/${coupon.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                body: JSON.stringify({ active: !coupon.active }),
-                              });
-                              const data = await res.json();
-                              if (data.success) setDiscounts(discounts.map(d => d.id === coupon.id ? data.coupon : d));
-                            } catch (err) {
-                              toast({ title: 'Error', description: 'Failed to update coupon', variant: 'destructive' });
-                            }
+                          onClick={() => {
+                            setDiscounts(discounts.map(d => d.id === coupon.id ? { ...d, active: !d.active } : d));
                           }}
                           className="flex-1"
                         >
@@ -740,20 +698,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={async () => {
+                          onClick={() => {
                             if (confirm(t('admin_coupon_delete_confirm'))) {
-                              try {
-                                const raw = localStorage.getItem('townteam_user');
-                                const token = raw ? JSON.parse(raw)?.token : null;
-                                const res = await fetch(`http://localhost:5000/coupons/${coupon.id}`, {
-                                  method: 'DELETE',
-                                  headers: { 'Authorization': `Bearer ${token}` },
-                                });
-                                const data = await res.json();
-                                if (data.success) setDiscounts(discounts.filter(d => d.id !== coupon.id));
-                              } catch (err) {
-                                toast({ title: 'Error', description: 'Failed to delete coupon', variant: 'destructive' });
-                              }
+                              setDiscounts(discounts.filter(d => d.id !== coupon.id));
                             }
                           }}
                         >
@@ -1623,28 +1570,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
           <ProductForm
             product={editingProduct}
             isAdding={isAdding}
-            onSave={(product) => {
-              console.log('ProductForm onSave called with:', product);
-              console.log('Current products before save:', products);
+            onSave={async (product) => {
+              try {
+                const raw = localStorage.getItem('townteam_user');
+                const token = raw ? JSON.parse(raw)?.token : null;
 
-              if (editingProduct) {
-                // Edit existing product
-                const updatedProducts = products.map(p => p.id === product.id ? product : p);
-                console.log('Updating product, new products:', updatedProducts);
-                setProducts(updatedProducts);
-                toast({
-                  title: t('admin_product_updated_title'),
-                  description: t('admin_product_updated_desc').replace('{{name}}', product.name),
-                });
-              } else {
-                // Add new product
-                const newProducts = [...products, product];
-                console.log('Adding new product, new products:', newProducts);
-                setProducts(newProducts);
-                toast({
-                  title: t('admin_product_added_title'),
-                  description: t('admin_product_added_desc').replace('{{name}}', product.name),
-                });
+                if (editingProduct) {
+                  const res = await fetch(`http://localhost:5000/products/${product.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(product),
+                  });
+                  const data = await res.json();
+                  if (!data.success) throw new Error(data.message);
+                  setProducts(products.map(p => p.id === product.id ? data.product : p));
+                  toast({
+                    title: t('admin_product_updated_title'),
+                    description: t('admin_product_updated_desc').replace('{{name}}', product.name),
+                  });
+                } else {
+                  const res = await fetch('http://localhost:5000/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(product),
+                  });
+                  const data = await res.json();
+                  if (!data.success) throw new Error(data.message);
+                  setProducts([data.product, ...products]);
+                  toast({
+                    title: t('admin_product_added_title'),
+                    description: t('admin_product_added_desc').replace('{{name}}', product.name),
+                  });
+                }
+              } catch (err: any) {
+                toast({ title: 'Error', description: err.message, variant: 'destructive' });
               }
               setEditingProduct(null);
               setIsAdding(false);
@@ -1699,4 +1658,3 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, userRole, produ
 };
 
 export default AdminDashboard;
-

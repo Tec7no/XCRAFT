@@ -3,11 +3,20 @@ import Product from "../models/product.model";
 
 const mapProduct = (product: any) => {
   const obj = product.toObject ? product.toObject() : product;
-  // Convert variantStock Map to plain object if needed
-  let variantStock = obj.variantStock;
-  if (variantStock && typeof variantStock.toObject === 'function') {
-    variantStock = variantStock.toObject();
+  
+  // Convert variantStock Map to plain object
+  let variantStock: Record<string, number> = {};
+  if (obj.variantStock) {
+    if (typeof obj.variantStock.forEach === 'function') {
+      // It's a MongoDB Map
+      obj.variantStock.forEach((value: number, key: string) => {
+        variantStock[key] = value;
+      });
+    } else if (typeof obj.variantStock === 'object') {
+      variantStock = { ...obj.variantStock };
+    }
   }
+
   return { ...obj, id: obj._id.toString(), variantStock };
 };
 
@@ -44,7 +53,12 @@ export const getProductById = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    const product = await Product.create(req.body);
+    const body = { ...req.body };
+    // Convert variantStock plain object to Map-compatible format for MongoDB
+    if (body.variantStock && typeof body.variantStock === 'object') {
+      body.variantStock = new Map(Object.entries(body.variantStock));
+    }
+    const product = await Product.create(body);
     return res.status(201).json({ success: true, product: mapProduct(product) });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -53,7 +67,12 @@ export const createProduct = async (req: Request, res: Response) => {
 
 export const updateProduct = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
+    const body = { ...req.body };
+    // Convert variantStock plain object to Map-compatible format for MongoDB
+    if (body.variantStock && typeof body.variantStock === 'object') {
+      body.variantStock = new Map(Object.entries(body.variantStock));
+    }
+    const product = await Product.findByIdAndUpdate(req.params.id, body, {
       new: true,
       runValidators: true,
     });

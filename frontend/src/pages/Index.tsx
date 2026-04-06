@@ -222,8 +222,10 @@ const Index: React.FC<IndexProps> = ({ onToggleCompare, compareList }) => {
 
       // 5. Colors
       if (filters.colors.length > 0) {
-        const hasColor = p.colors.some(c => filters.colors.includes(c.hex));
-        if (!hasColor) return false;
+          const hasColor = p.colors.some(c => 
+              filters.colors.some(fc => fc.toLowerCase() === c.hex.toLowerCase())
+          );
+          if (!hasColor) return false;
       }
 
       // 6. In Stock
@@ -277,9 +279,8 @@ const Index: React.FC<IndexProps> = ({ onToggleCompare, compareList }) => {
   };
 
   const handleProductClick = (product: Product) => {
-    setSelectedProduct(product);
-    setView('product');
-    window.scrollTo(0, 0);
+    const productId = product.id || (product as any)._id;
+    navigate(`/product/${productId}`);
   };
 
   const handleCheckout = () => {

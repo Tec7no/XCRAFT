@@ -91,13 +91,14 @@ export function SiteSettingsProvider({ children, forceEditorMode }: SiteSettings
     }, []);
 
     const publishDraft = useCallback((currentSettings?: SiteSettings) => {
-        if (currentSettings) {
-            savePublishedSettings(currentSettings);
-            saveDraftSettings(currentSettings);
-        } else {
-            publishDraftStorage();
-        }
-    }, []);
+        const toPublish = currentSettings || settings;
+        savePublishedSettings(toPublish);
+        saveDraftSettings(toPublish);
+        // Always sync to MongoDB
+        import('./site-settings.storage').then(({ saveSettingsToDB }) => {
+            saveSettingsToDB(toPublish);
+        });
+    }, [settings]);
 
     const resetDraftToPublished = useCallback(() => {
         resetDraftStorage();

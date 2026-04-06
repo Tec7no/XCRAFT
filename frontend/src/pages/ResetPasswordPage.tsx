@@ -52,7 +52,7 @@ export default function ResetPasswordPage() {
       setSuccess("Password updated successfully");
 
       setTimeout(() => {
-        navigate("/login");
+        navigate("/auth");
       }, 3000);
 
     } catch (err) {
