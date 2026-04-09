@@ -6,7 +6,8 @@ export type Badge = 'New' | 'Sale' | 'Limited' | null;
 export interface ColorOption {
   hex: string;
   name?: string;
-  image?: string; // URL or base64 of color-specific image
+  image?: string; // Primary color image (legacy)
+  images?: string[]; // Multiple color images
 }
 
 // Legacy: Stock by color (key is lowercase hex, value is quantity)
@@ -61,6 +62,7 @@ export interface Product {
   specifications?: ProductSpecificationSection[];
   sizeGuideImage?: string;
   featuredIn?: ('Best Sellers' | 'New Arrivals' | 'Offers')[];
+  defaultColorHex?: string; // The color shown by default on product page
 }
 
 export interface ProductSpecItem {
@@ -193,4 +195,3 @@ export interface Discount {
   minOrderAmount?: number;
   usageCount: number;
 }
-

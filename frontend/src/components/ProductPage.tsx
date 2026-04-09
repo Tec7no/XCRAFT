@@ -108,8 +108,12 @@ const ProductPage: React.FC<ProductPageProps> = ({
     window.scrollTo(0, 0);
     setSelectedImageIdx(0);
     setSelectedSize(availableSizes[0] || null);
-    setSelectedColor((product.colors ?? [])[0] || null);
-  }, [product.id, availableSizes, product.colors]);
+    // Use defaultColorHex if set, otherwise first color
+    const defaultColor = product.defaultColorHex
+      ? (product.colors ?? []).find(c => c.hex === product.defaultColorHex) || (product.colors ?? [])[0]
+      : (product.colors ?? [])[0];
+    setSelectedColor(defaultColor || null);
+  }, [product.id, availableSizes, product.colors, product.defaultColorHex]);
 
   const handleNextImage = () => {
     if (images.length <= 1) return;
@@ -129,11 +133,15 @@ const ProductPage: React.FC<ProductPageProps> = ({
 
   // Use color-specific image if available, otherwise use gallery images
   const displayImages = React.useMemo(() => {
-    if (selectedColor?.image) {
-      // If selected color has an image, show it first, then other product images
-      return [selectedColor.image, ...images.filter(img => img !== selectedColor.image)];
-    }
-    return images;
+    // Use color-specific images if available
+    const colorImgs = selectedColor?.images?.length
+      ? selectedColor.images
+      : selectedColor?.image
+        ? [selectedColor.image]
+        : [];
+    // If selected color has its own images, show ONLY those
+    // Otherwise show the general product images
+    return colorImgs.length > 0 ? colorImgs : images;
   }, [selectedColor, images]);
 
   // When color changes, reset image index to 0 so we see the color-specific image (if any)
@@ -469,4 +477,3 @@ const ProductPage: React.FC<ProductPageProps> = ({
 };
 
 export default ProductPage;
-

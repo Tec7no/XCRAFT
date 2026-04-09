@@ -725,17 +725,20 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                                                 className="w-6 h-6 rounded-full border-2 border-border flex-shrink-0"
                                                 style={{ backgroundColor: color.hex }}
                                             />
-                                            <span className="uppercase text-xs font-bold">{color.name || color.hex}</span>
+                                            <div>
+                                                <span className="uppercase text-xs font-bold block">{color.name || color.hex}</span>
+                                                <span className="text-[9px] text-muted-foreground">{(color.images?.length || (color.image ? 1 : 0))} photo(s)</span>
+                                            </div>
                                         </div>
 
-                                        {/* Color Image Upload */}
-                                        <div className="flex items-center gap-2">
-                                            {color.image ? (
-                                                <div className="relative group/colorimg">
+                                        {/* Color Images Upload - Multiple */}
+                                        <div className="flex flex-wrap gap-1 items-center">
+                                            {(color.images || (color.image ? [color.image] : [])).map((img, imgIdx) => (
+                                                <div key={imgIdx} className="relative group/colorimg">
                                                     <img
-                                                        src={color.image}
-                                                        alt={color.name || color.hex}
-                                                        className="w-12 h-12 object-cover rounded border border-border"
+                                                        src={img}
+                                                        alt={`${color.name || color.hex} ${imgIdx + 1}`}
+                                                        className="w-10 h-10 object-cover rounded border border-border"
                                                     />
                                                     <button
                                                         type="button"
@@ -743,35 +746,42 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                                                             setProduct(prev => ({
                                                                 ...prev,
                                                                 colors: prev.colors.map(c =>
-                                                                    c.hex === color.hex ? { ...c, image: undefined } : c
+                                                                    c.hex === color.hex
+                                                                        ? { ...c, images: (c.images || []).filter((_, i) => i !== imgIdx), image: imgIdx === 0 ? (c.images || [])[1] : c.image }
+                                                                        : c
                                                                 )
                                                             }));
                                                         }}
                                                         className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground p-0.5 rounded-full opacity-0 group-hover/colorimg:opacity-100 transition-opacity"
                                                     >
-                                                        <X size={10} />
+                                                        <X size={8} />
                                                     </button>
                                                 </div>
-                                            ) : (
-                                                <label className="w-12 h-12 border-2 border-dashed border-border rounded flex items-center justify-center cursor-pointer hover:border-secondary transition-all bg-background">
-                                                    <Upload size={14} className="text-muted-foreground" />
+                                            ))}
+                                            {(color.images || []).length < 5 && (
+                                                <label className="w-10 h-10 border-2 border-dashed border-border rounded flex items-center justify-center cursor-pointer hover:border-secondary transition-all bg-background flex-shrink-0">
+                                                    <Upload size={12} className="text-muted-foreground" />
                                                     <input
                                                         type="file"
                                                         className="hidden"
                                                         accept="image/*"
+                                                        multiple
                                                         onChange={(e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (!file) return;
-                                                            const reader = new FileReader();
-                                                            reader.onloadend = () => {
-                                                                setProduct(prev => ({
-                                                                    ...prev,
-                                                                    colors: prev.colors.map(c =>
-                                                                        c.hex === color.hex ? { ...c, image: reader.result as string } : c
-                                                                    )
-                                                                }));
-                                                            };
-                                                            reader.readAsDataURL(file);
+                                                            const files = Array.from(e.target.files || []);
+                                                            files.forEach(file => {
+                                                                const reader = new FileReader();
+                                                                reader.onloadend = () => {
+                                                                    setProduct(prev => ({
+                                                                        ...prev,
+                                                                        colors: prev.colors.map(c =>
+                                                                            c.hex === color.hex
+                                                                                ? { ...c, images: [...(c.images || []), reader.result as string], image: c.image || reader.result as string }
+                                                                                : c
+                                                                        )
+                                                                    }));
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            });
                                                             e.target.value = '';
                                                         }}
                                                     />
